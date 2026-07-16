@@ -1,20 +1,74 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
+from threading import Lock
+from typing import Any
 
 from usr.plugins.tree_ring_memory.helpers import paths
 from usr.plugins.tree_ring_memory.helpers.cli import TreeRingCli
 from usr.plugins.tree_ring_memory.helpers.config import DEFAULT_CONFIG, load_config
+from usr.plugins.tree_ring_memory.helpers.legacy import LegacyMigrator
 
 
-def install() -> bool:
-    """Create only plugin-owned directories.
+_BOOTSTRAP_LOCK = Lock()
+_BOOTSTRAPPED_ROOTS: set[Path] = set()
 
-    Binary installation and legacy import stay explicit because they download
-    or copy executable code and write durable user memory respectively.
+
+def bootstrap_runtime(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Initialize, migrate, and audit the Rust-owned store idempotently."""
+
+    resolved = load_config(config)
+    paths.ensure_memory_dirs(resolved)
+    bridge = TreeRingCli(resolved)
+    initial_status = bridge.status()
+    if not initial_status.get("ok"):
+        detail = str(initial_status.get("error") or "tree-ring runtime is unavailable")
+        raise RuntimeError(f"Tree Ring Memory automatic setup failed: {detail}")
+
+    initialized_now = not bool(initial_status.get("initialized"))
+    init_result = bridge.init() if initialized_now else None
+    migration = None
+    if initial_status.get("legacy_migration_pending"):
+        migration = LegacyMigrator(resolved, cli=bridge).migrate(confirm=True)
+
+    audit = bridge.audit("all")
+    final_status = bridge.status()
+    if not final_status.get("ok") or not final_status.get("initialized"):
+        detail = str(final_status.get("error") or "the Rust-owned store did not initialize")
+        raise RuntimeError(f"Tree Ring Memory automatic setup failed: {detail}")
+
+    return {
+        "ok": True,
+        "initialized_now": initialized_now,
+        "init": init_result,
+        "migration": migration,
+        "audit": audit,
+        "status": final_status,
+    }
+
+
+def _ensure_auto_bootstrap(config: dict[str, Any]) -> dict[str, Any] | None:
+    root = paths.memory_root(config).expanduser().resolve()
+    if root in _BOOTSTRAPPED_ROOTS:
+        return None
+    with _BOOTSTRAP_LOCK:
+        if root in _BOOTSTRAPPED_ROOTS:
+            return None
+        report = bootstrap_runtime(config)
+        _BOOTSTRAPPED_ROOTS.add(root)
+        return report
+
+
+def install(**kwargs: Any) -> bool:
+    """Automatically prepare the runtime after install and update.
+
+    The packaged binary is selected locally; legacy migration is copy-only and
+    preserves the Python-v1 database as read-only recovery input.
     """
 
-    paths.ensure_memory_dirs(load_config())
+    del kwargs
+    _ensure_auto_bootstrap(load_config())
     return True
 
 
@@ -47,4 +101,6 @@ def get_default_plugin_config(default=None, **kwargs):
 
 def get_plugin_config(default=None, **kwargs):
     del kwargs
-    return load_config(default if isinstance(default, dict) else None)
+    config = load_config(default if isinstance(default, dict) else None)
+    _ensure_auto_bootstrap(config)
+    return config

@@ -15,10 +15,15 @@ def test_manifest_declares_rust_bridge_generation():
     defaults = yaml.safe_load((ROOT / "default_config.yaml").read_text(encoding="utf-8"))
 
     assert manifest["name"] == "tree_ring_memory"
-    assert manifest["version"] == "2.0.0"
+    assert manifest["version"] == "2.1.0"
     assert defaults["cli"]["required_version"] == "0.12.0"
     assert defaults["storage"]["root"].endswith("/tree_ring_memory")
     assert defaults["storage"]["legacy_sqlite_path"].endswith("/indexes/memory.sqlite")
+
+
+def test_plugin_uses_hooks_without_manual_execute_script():
+    assert (ROOT / "hooks.py").is_file()
+    assert not (ROOT / "execute.py").exists()
 
 
 def test_bundled_linux_binaries_match_declared_checksums():

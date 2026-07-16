@@ -1,0 +1,272 @@
+<html>
+<head>
+    <title>Tree Ring Memory Settings</title>
+    <script type="module">
+        import { store } from "/plugins/tree_ring_memory/webui/memory-store.js";
+    </script>
+</head>
+<body>
+    <div x-data>
+        <template x-if="$store.treeRingMemory && config">
+            <div class="trm-settings" x-init="$store.treeRingMemory.ensureSettingsUi(); $store.treeRingMemory.refreshStatus()">
+                <header class="trm-settings-hero">
+                    <div>
+                        <div class="section-title">Tree Ring Memory</div>
+                        <div class="section-description">Configure the Agent Zero bridge to the Rust-native v0.12 CLI.</div>
+                    </div>
+                    <button type="button" class="btn btn-field" @click="openModal('/plugins/tree_ring_memory/webui/main.html')">
+                        <span class="material-symbols-outlined">account_tree</span>
+                        <span>Open Memory</span>
+                    </button>
+                </header>
+
+                <section class="trm-runtime-card" :class="{ 'is-ready': $store.treeRingMemory.status.ok }">
+                    <span class="material-symbols-outlined" x-text="$store.treeRingMemory.status.ok ? 'verified' : 'warning'"></span>
+                    <div class="trm-runtime-copy">
+                        <strong x-text="$store.treeRingMemory.status.ok ? `Ready · tree-ring ${$store.treeRingMemory.status.version}` : 'CLI setup required'"></strong>
+                        <span x-text="$store.treeRingMemory.status.ok ? $store.treeRingMemory.status.binary : ($store.treeRingMemory.status.error || 'No compatible binary was found.')"></span>
+                        <span x-show="$store.treeRingMemory.status.legacy_migration_pending">The Python-v1 database is preserved and awaits an explicit migration.</span>
+                    </div>
+                    <button type="button" class="btn btn-field" @click="$store.treeRingMemory.refreshStatus()">Refresh</button>
+                </section>
+
+                <section class="trm-settings-card">
+                    <div class="trm-card-heading">
+                        <span class="material-symbols-outlined">terminal</span>
+                        <div>
+                            <strong>Runtime</strong>
+                            <span>These values control the executable boundary. The bridge accepts 0.12.x and fails closed on incompatible versions.</span>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Enabled</div>
+                            <div class="field-description">Expose Tree Ring tools and UI through this plugin.</div>
+                        </div>
+                        <div class="field-control">
+                            <label class="toggle">
+                                <input type="checkbox" x-model="config.enabled" />
+                                <span class="toggler"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">CLI Binary</div>
+                            <div class="field-description">Command name or absolute path. The plugin also checks its own <code>bin/tree-ring</code>.</div>
+                        </div>
+                        <div class="field-control trm-wide-control">
+                            <input type="text" x-model="config.cli.binary" spellcheck="false" />
+                        </div>
+                    </div>
+
+                    <div class="trm-number-grid">
+                        <label>
+                            <span>Required version</span>
+                            <input type="text" x-model="config.cli.required_version" spellcheck="false" readonly />
+                        </label>
+                        <label>
+                            <span>Timeout seconds</span>
+                            <input type="number" min="1" max="300" x-model.number="config.cli.timeout_seconds" />
+                        </label>
+                    </div>
+                </section>
+
+                <section class="trm-settings-card">
+                    <div class="trm-card-heading">
+                        <span class="material-symbols-outlined">database</span>
+                        <div>
+                            <strong>Storage and migration</strong>
+                            <span>The Rust CLI owns <code>memory.sqlite</code>. The old database remains read-only migration input.</span>
+                        </div>
+                    </div>
+
+                    <label class="trm-path-field">
+                        <span>Memory root</span>
+                        <input type="text" x-model="config.storage.root" spellcheck="false" />
+                    </label>
+                    <label class="trm-path-field">
+                        <span>Legacy Python-v1 SQLite</span>
+                        <input type="text" x-model="config.storage.legacy_sqlite_path" spellcheck="false" />
+                    </label>
+
+                    <div class="trm-action-row">
+                        <button type="button" class="btn btn-field" @click="$store.treeRingMemory.developerAction('migrate')">
+                            Validate migration
+                        </button>
+                        <button type="button" class="btn btn-field" @click="$store.treeRingMemory.developerAction('rebuild_fts')">
+                            Repair FTS
+                        </button>
+                        <button type="button" class="btn btn-field" @click="$store.treeRingMemory.developerAction('export_diagnostics')">
+                            Export diagnostics
+                        </button>
+                    </div>
+                    <p class="trm-footnote">Validation is dry-run only. The durable import requires <code>python3 -m usr.plugins.tree_ring_memory.execute migrate --confirm</code>.</p>
+                </section>
+
+                <section class="trm-settings-card">
+                    <div class="trm-card-heading">
+                        <span class="material-symbols-outlined">manage_search</span>
+                        <div>
+                            <strong>Recall adapter</strong>
+                            <span>Tree Ring performs ranking; the bridge requests a larger candidate set only when Agent Zero applies host-side ring or event filters.</span>
+                        </div>
+                    </div>
+                    <div class="trm-number-grid">
+                        <label>
+                            <span>Default results</span>
+                            <input type="number" min="1" max="100" x-model.number="config.recall.max_results_default" />
+                        </label>
+                        <label>
+                            <span>Filtered scan limit</span>
+                            <input type="number" min="8" max="1000" x-model.number="config.recall.bridge_scan_limit" />
+                        </label>
+                    </div>
+                </section>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        .trm-settings {
+            --trm-surface: color-mix(in srgb, var(--color-panel) 90%, var(--color-background));
+            --trm-ready: #67b87a;
+            --trm-warn: #cf8a66;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        .trm-settings-hero,
+        .trm-runtime-card,
+        .trm-settings-card {
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background: var(--trm-surface);
+        }
+
+        .trm-settings-hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 16px;
+        }
+
+        .trm-runtime-card {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-color: color-mix(in srgb, var(--trm-warn) 55%, var(--color-border));
+        }
+
+        .trm-runtime-card.is-ready {
+            border-color: color-mix(in srgb, var(--trm-ready) 55%, var(--color-border));
+        }
+
+        .trm-runtime-copy,
+        .trm-card-heading > div {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            min-width: 0;
+        }
+
+        .trm-runtime-copy span,
+        .trm-card-heading span,
+        .trm-footnote {
+            color: var(--color-text-secondary);
+            font-size: 12px;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+
+        .trm-settings-card {
+            padding: 14px;
+        }
+
+        .trm-card-heading {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding-bottom: 12px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .trm-settings-card .field {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(220px, 42%);
+            align-items: center;
+            gap: 16px;
+            padding: 12px 0;
+            border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+        }
+
+        .trm-wide-control input,
+        .trm-path-field input,
+        .trm-number-grid input {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .trm-path-field,
+        .trm-number-grid label {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            color: var(--color-text-secondary);
+            font-size: 12px;
+        }
+
+        .trm-path-field {
+            margin-top: 12px;
+        }
+
+        .trm-number-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .trm-action-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        .trm-footnote {
+            margin: 10px 0 0;
+        }
+
+        code {
+            font-family: var(--font-family-monospace, monospace);
+            font-size: 0.94em;
+        }
+
+        @media (max-width: 760px) {
+            .trm-settings-hero,
+            .trm-runtime-card {
+                align-items: flex-start;
+                grid-template-columns: auto minmax(0, 1fr);
+            }
+
+            .trm-runtime-card .btn {
+                grid-column: 1 / -1;
+            }
+
+            .trm-settings-card .field,
+            .trm-number-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</body>
+</html>

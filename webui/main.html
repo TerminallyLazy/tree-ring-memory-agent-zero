@@ -1,0 +1,1152 @@
+<html>
+<head>
+    <title>Tree Ring Memory</title>
+    <script type="module" src="/plugins/tree_ring_memory/webui/memory-store.js"></script>
+</head>
+<body>
+    <div x-data>
+        <template x-if="$store.treeRingMemory">
+            <div class="tree-ring-memory-panel" x-init="$store.treeRingMemory.onOpen()">
+                <header class="trm-panel-header">
+                    <div class="trm-brand-mark">
+                        <img src="/plugins/tree_ring_memory/webui/thumbnail.png" alt="" />
+                    </div>
+                    <div class="trm-title-block">
+                        <div class="section-title">Tree Ring Memory</div>
+                        <div class="section-description">
+                            Agent Zero bridge to the Rust-native Tree Ring Memory CLI.
+                        </div>
+                    </div>
+                    <div class="trm-panel-stat">
+                        <span class="trm-panel-stat-value" x-text="$store.treeRingMemory.totalCount()"></span>
+                        <span class="trm-panel-stat-label">memories</span>
+                    </div>
+                </header>
+
+                <section class="trm-runtime-notice" :class="{ 'is-ready': $store.treeRingMemory.status.ok }">
+                    <span class="material-symbols-outlined" x-text="$store.treeRingMemory.status.ok ? 'verified' : 'warning'"></span>
+                    <div>
+                        <strong x-text="$store.treeRingMemory.status.ok ? `tree-ring ${$store.treeRingMemory.status.version}` : 'Tree Ring CLI unavailable'"></strong>
+                        <span x-text="$store.treeRingMemory.status.ok ? ($store.treeRingMemory.status.legacy_migration_pending ? 'Legacy Python memory is preserved and awaits explicit migration.' : 'Rust-owned storage is ready.') : ($store.treeRingMemory.status.error || 'Configure a compatible v0.12.x binary in plugin settings.')"></span>
+                    </div>
+                </section>
+
+                <section class="trm-ring-observatory" aria-label="Memory ring usage">
+                    <div class="trm-ring-visual">
+                        <div class="trm-ring-map">
+                            <svg viewBox="0 0 260 260" aria-hidden="true" focusable="false">
+                                <circle class="trm-usage-track" cx="130" cy="130" r="108"></circle>
+                                <circle class="trm-usage-track" cx="130" cy="130" r="91"></circle>
+                                <circle class="trm-usage-track" cx="130" cy="130" r="74"></circle>
+                                <circle class="trm-usage-track" cx="130" cy="130" r="57"></circle>
+                                <circle class="trm-usage-track" cx="130" cy="130" r="40"></circle>
+                                <circle class="trm-usage-track" cx="130" cy="130" r="23"></circle>
+
+                                <circle class="trm-usage-arc" data-ring="cambium" cx="130" cy="130" r="108" pathLength="100" :style="$store.treeRingMemory.ringArcStyle('cambium')"></circle>
+                                <circle class="trm-usage-arc" data-ring="outer" cx="130" cy="130" r="91" pathLength="100" :style="$store.treeRingMemory.ringArcStyle('outer')"></circle>
+                                <circle class="trm-usage-arc" data-ring="inner" cx="130" cy="130" r="74" pathLength="100" :style="$store.treeRingMemory.ringArcStyle('inner')"></circle>
+                                <circle class="trm-usage-arc" data-ring="heartwood" cx="130" cy="130" r="57" pathLength="100" :style="$store.treeRingMemory.ringArcStyle('heartwood')"></circle>
+                                <circle class="trm-usage-arc" data-ring="scar" cx="130" cy="130" r="40" pathLength="100" :style="$store.treeRingMemory.ringArcStyle('scar')"></circle>
+                                <circle class="trm-usage-arc" data-ring="seed" cx="130" cy="130" r="23" pathLength="100" :style="$store.treeRingMemory.ringArcStyle('seed')"></circle>
+                            </svg>
+                            <div class="trm-ring-core">
+                                <strong x-text="$store.treeRingMemory.totalCount()"></strong>
+                                <span>memories</span>
+                            </div>
+                        </div>
+                        <div class="trm-ring-visual-copy">
+                            <span class="trm-eyebrow">Living memory profile</span>
+                            <strong x-text="$store.treeRingMemory.dominantRingLabel()"></strong>
+                            <span>Each illuminated arc is normalized to the busiest ring. The ledger shows its exact share of the store.</span>
+                        </div>
+                    </div>
+
+                    <div class="trm-ring-ledger">
+                        <template x-for="ring in $store.treeRingMemory.rings" :key="ring">
+                            <button
+                                type="button"
+                                class="trm-ring-tile"
+                                :class="{ 'is-active': $store.treeRingMemory.ring === ring }"
+                                :data-ring="ring"
+                                :aria-pressed="$store.treeRingMemory.ring === ring"
+                                :title="$store.treeRingMemory.ringUsageLabel(ring)"
+                                @click="$store.treeRingMemory.selectRing(ring)"
+                            >
+                                <span class="trm-ring-tile-top">
+                                    <span class="trm-ring-identity">
+                                        <span class="trm-ring-beacon"></span>
+                                        <span class="trm-ring-name" x-text="$store.treeRingMemory.ringLabel(ring)"></span>
+                                    </span>
+                                    <span class="trm-ring-count" x-text="$store.treeRingMemory.ringCount(ring)"></span>
+                                </span>
+                                <span class="trm-ring-share" x-text="$store.treeRingMemory.ringShareLabel(ring)"></span>
+                                <span class="trm-ring-meter" aria-hidden="true">
+                                    <span :style="$store.treeRingMemory.ringMeterStyle(ring)"></span>
+                                </span>
+                            </button>
+                        </template>
+                    </div>
+                </section>
+
+                <section class="trm-search-band" aria-label="Memory search">
+                    <div class="trm-search-row">
+                        <span class="material-symbols-outlined trm-search-icon">search</span>
+                        <input
+                            type="text"
+                            x-model="$store.treeRingMemory.query"
+                            @keydown.enter="$store.treeRingMemory.search()"
+                            placeholder="Recall a decision, warning, preference, or experiment..."
+                            autocomplete="off"
+                        />
+                        <button type="button" class="trm-primary-action" @click="$store.treeRingMemory.search()" :disabled="$store.treeRingMemory.searchBusy">
+                            <span class="material-symbols-outlined" x-text="$store.treeRingMemory.searchBusy ? 'progress_activity' : 'travel_explore'"></span>
+                            <span x-text="$store.treeRingMemory.searchBusy ? 'Searching' : 'Search'"></span>
+                        </button>
+                    </div>
+
+                    <div class="trm-filter-row">
+                        <select x-model="$store.treeRingMemory.ring" @change="$store.treeRingMemory.search()" aria-label="Ring filter">
+                            <option value="">All rings</option>
+                            <option value="cambium">Cambium</option>
+                            <option value="outer">Outer</option>
+                            <option value="inner">Inner</option>
+                            <option value="heartwood">Heartwood</option>
+                            <option value="scar">Scars</option>
+                            <option value="seed">Seeds</option>
+                        </select>
+                        <select x-model="$store.treeRingMemory.eventType" @change="$store.treeRingMemory.search()" aria-label="Event type filter">
+                            <option value="">All event types</option>
+                            <option value="user_preference">User preferences</option>
+                            <option value="decision">Decisions</option>
+                            <option value="dox_contract">DOX contracts</option>
+                            <option value="evaluation_promotion">Evidence promotions</option>
+                            <option value="evaluation_rejection">Evidence rejections</option>
+                            <option value="evaluation_result">Evidence results</option>
+                            <option value="evaluation_hypothesis">Evidence hypotheses</option>
+                            <option value="lesson">Lessons</option>
+                            <option value="warning">Warnings</option>
+                            <option value="hypothesis">Hypotheses</option>
+                            <option value="summary">Summaries</option>
+                        </select>
+                        <label class="trm-switch">
+                            <input type="checkbox" x-model="$store.treeRingMemory.includeSensitive" @change="$store.treeRingMemory.search()" />
+                            <span class="trm-switch-track"></span>
+                            <span>Sensitive</span>
+                        </label>
+                        <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.clearFilters()">
+                            <span class="material-symbols-outlined">filter_alt_off</span>
+                            <span>Clear</span>
+                        </button>
+                    </div>
+                </section>
+
+                <main class="trm-workspace">
+                    <section class="trm-results-pane" aria-label="Memory results">
+                        <div class="trm-pane-header">
+                            <div>
+                                <div class="trm-pane-title">Results</div>
+                                <div class="trm-pane-subtitle" x-text="$store.treeRingMemory.searchBusy ? 'Searching memory rings...' : `${$store.treeRingMemory.results.length} shown`"></div>
+                            </div>
+                        </div>
+
+                        <template x-if="!$store.treeRingMemory.searchBusy && !$store.treeRingMemory.results.length">
+                            <div class="trm-empty-state">
+                                <span class="material-symbols-outlined">forest</span>
+                                <strong>No matching memory yet</strong>
+                                <span>Try a broader query, clear filters, or store a meaningful decision from the agent tools.</span>
+                            </div>
+                        </template>
+
+                        <div class="trm-result-list" x-show="$store.treeRingMemory.results.length">
+                            <template x-for="memory in $store.treeRingMemory.results" :key="memory.id">
+                                <button
+                                    type="button"
+                                    class="trm-result-row"
+                                    :class="{ 'is-selected': $store.treeRingMemory.selected && $store.treeRingMemory.selected.id === memory.id }"
+                                    @click="$store.treeRingMemory.select(memory)"
+                                >
+                                    <span class="trm-result-topline">
+                                        <span class="trm-result-ring" :data-ring="memory.ring" x-text="$store.treeRingMemory.ringLabel(memory.ring)"></span>
+                                        <span class="trm-result-score" x-text="$store.treeRingMemory.formatScore(memory.confidence)"></span>
+                                    </span>
+                                    <span class="trm-result-summary" x-text="memory.summary"></span>
+                                    <span class="trm-result-meta" x-text="$store.treeRingMemory.resultMeta(memory)"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </section>
+
+                    <aside class="trm-detail-pane" aria-label="Memory detail">
+                        <template x-if="!$store.treeRingMemory.selected">
+                            <div class="trm-detail-empty">
+                                <span class="material-symbols-outlined">neurology</span>
+                                <strong>Select a memory</strong>
+                                <span>Details, evidence, and review actions appear here.</span>
+                            </div>
+                        </template>
+
+                        <template x-if="$store.treeRingMemory.selected">
+                            <div class="trm-detail-card">
+                                <div class="trm-detail-head">
+                                    <span class="trm-result-ring" :data-ring="$store.treeRingMemory.selected.ring" x-text="$store.treeRingMemory.ringLabel($store.treeRingMemory.selected.ring)"></span>
+                                    <span class="trm-detail-id" x-text="$store.treeRingMemory.selected.id"></span>
+                                </div>
+
+                                <h3 x-text="$store.treeRingMemory.selected.summary"></h3>
+                                <p class="trm-detail-copy" x-show="$store.treeRingMemory.selected.details" x-text="$store.treeRingMemory.selected.details"></p>
+
+                                <dl class="trm-evidence-grid">
+                                    <div>
+                                        <dt>Type</dt>
+                                        <dd x-text="$store.treeRingMemory.selected.event_type || 'n/a'"></dd>
+                                    </div>
+                                    <div>
+                                        <dt>Confidence</dt>
+                                        <dd x-text="$store.treeRingMemory.formatScore($store.treeRingMemory.selected.confidence)"></dd>
+                                    </div>
+                                    <div>
+                                        <dt>Salience</dt>
+                                        <dd x-text="$store.treeRingMemory.formatScore($store.treeRingMemory.selected.salience)"></dd>
+                                    </div>
+                                    <div>
+                                        <dt>Source</dt>
+                                        <dd x-text="$store.treeRingMemory.sourceLabel($store.treeRingMemory.selected)"></dd>
+                                    </div>
+                                </dl>
+
+                                <div class="trm-tags" x-show="$store.treeRingMemory.tagText($store.treeRingMemory.selected)">
+                                    <span class="material-symbols-outlined">sell</span>
+                                    <span x-text="$store.treeRingMemory.tagText($store.treeRingMemory.selected)"></span>
+                                </div>
+
+                                <div class="trm-action-group">
+                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.mark('heartwood')">
+                                        <span class="material-symbols-outlined">verified</span>
+                                        <span>Heartwood</span>
+                                    </button>
+                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.mark('scar')">
+                                        <span class="material-symbols-outlined">report</span>
+                                        <span>Scar</span>
+                                    </button>
+                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.mark('seed')">
+                                        <span class="material-symbols-outlined">psychiatry</span>
+                                        <span>Seed</span>
+                                    </button>
+                                </div>
+
+                                <div class="trm-danger-row">
+                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.forgetSelected('redact')">
+                                        <span class="material-symbols-outlined">ink_eraser</span>
+                                        <span>Redact</span>
+                                    </button>
+                                    <button type="button" class="trm-danger-action" @click="$store.treeRingMemory.forgetSelected('delete')">
+                                        <span class="material-symbols-outlined">delete</span>
+                                        <span>Forget</span>
+                                    </button>
+                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.exportStore()">
+                                        <span class="material-symbols-outlined">download</span>
+                                        <span>Export Store</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </aside>
+                </main>
+
+                <div class="trm-export-path" x-show="$store.treeRingMemory.exportPath" x-text="$store.treeRingMemory.exportPath"></div>
+
+                <div class="modal-footer trm-maintenance-footer" data-modal-footer>
+                    <div class="trm-maintenance-bar">
+                        <div class="trm-maintenance-label">
+                            <span class="material-symbols-outlined" :class="{ 'is-spinning': $store.treeRingMemory.maintenanceBusy }" x-text="$store.treeRingMemory.maintenanceBusy ? 'progress_activity' : 'settings_suggest'"></span>
+                            <span>Maintenance</span>
+                        </div>
+                        <div class="trm-maintenance-actions">
+                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('consolidate')" :disabled="$store.treeRingMemory.maintenanceBusy">Consolidate</button>
+                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('sync_dox')" :disabled="$store.treeRingMemory.maintenanceBusy">Preview DOX</button>
+                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('sync_revolve')" :disabled="$store.treeRingMemory.maintenanceBusy">Preview Revolve</button>
+                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('audit')" :disabled="$store.treeRingMemory.maintenanceBusy">Audit</button>
+                            <button type="button" class="trm-primary-action is-compact" @click="$store.treeRingMemory.maintenance('export')" :disabled="$store.treeRingMemory.maintenanceBusy">Export</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <style>
+        .tree-ring-memory-panel {
+            --trm-surface: color-mix(in srgb, var(--color-panel) 88%, var(--color-background));
+            --trm-raised: color-mix(in srgb, var(--color-message-bg) 80%, var(--color-panel));
+            --trm-soft: color-mix(in srgb, var(--color-border) 26%, transparent);
+            --trm-ring-cambium: #67b87a;
+            --trm-ring-outer: #8aa6d8;
+            --trm-ring-inner: #b59b72;
+            --trm-ring-heartwood: #d0a15d;
+            --trm-ring-scar: #cf6679;
+            --trm-ring-seed: #88c6bd;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        .trm-panel-header {
+            display: grid;
+            grid-template-columns: 56px minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background:
+                linear-gradient(135deg, color-mix(in srgb, var(--trm-ring-heartwood) 10%, transparent), transparent 44%),
+                var(--trm-surface);
+        }
+
+        .trm-brand-mark {
+            width: 52px;
+            height: 52px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            background: var(--color-background);
+            overflow: hidden;
+        }
+
+        .trm-brand-mark img {
+            width: 42px;
+            height: 42px;
+            object-fit: contain;
+        }
+
+        .trm-title-block {
+            min-width: 0;
+        }
+
+        .trm-runtime-notice {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid color-mix(in srgb, var(--trm-ring-scar) 52%, var(--color-border));
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--trm-ring-scar) 9%, var(--trm-surface));
+        }
+
+        .trm-runtime-notice.is-ready {
+            border-color: color-mix(in srgb, var(--trm-ring-cambium) 52%, var(--color-border));
+            background: color-mix(in srgb, var(--trm-ring-cambium) 9%, var(--trm-surface));
+        }
+
+        .trm-runtime-notice > div {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .trm-runtime-notice span:last-child {
+            color: var(--color-text-secondary);
+            font-size: 12px;
+        }
+
+        .trm-title-block .section-title {
+            margin: 0 0 4px 0;
+            color: var(--color-text);
+        }
+
+        .trm-title-block .section-description {
+            margin: 0;
+            color: var(--color-text-muted);
+        }
+
+        .trm-panel-stat {
+            display: flex;
+            align-items: flex-end;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 72px;
+            padding: 8px 10px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--color-background) 72%, transparent);
+        }
+
+        .trm-panel-stat-value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .trm-panel-stat-label,
+        .trm-pane-subtitle,
+        .trm-result-meta,
+        .trm-detail-id,
+        .trm-export-path {
+            color: var(--color-text-muted);
+            font-size: 0.75rem;
+        }
+
+        .trm-search-band,
+        .trm-results-pane,
+        .trm-detail-pane {
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background: var(--trm-surface);
+        }
+
+        .trm-search-band {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 12px;
+        }
+
+        .trm-search-row,
+        .trm-filter-row,
+        .trm-maintenance-bar,
+        .trm-maintenance-actions,
+        .trm-action-group,
+        .trm-danger-row,
+        .trm-tags {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .trm-search-row {
+            min-height: 42px;
+            padding: 0 0 0 10px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background: var(--color-background);
+        }
+
+        .trm-search-icon {
+            color: var(--color-text-muted);
+            font-size: 20px;
+        }
+
+        .trm-search-row input {
+            min-width: 0;
+            flex: 1;
+            border: 0;
+            background: transparent;
+            color: var(--color-text);
+            outline: none;
+        }
+
+        .trm-filter-row {
+            flex-wrap: wrap;
+        }
+
+        .trm-filter-row select {
+            width: auto;
+            min-width: 160px;
+            height: 34px;
+            flex: 1 1 180px;
+        }
+
+        .trm-primary-action,
+        .trm-quiet-action,
+        .trm-danger-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-height: 34px;
+            padding: 0 11px;
+            border: 1px solid var(--color-border);
+            border-radius: 7px;
+            cursor: pointer;
+            font-family: var(--font-family-main);
+            font-size: 0.78rem;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+        }
+
+        .trm-primary-action {
+            border-color: color-mix(in srgb, var(--color-highlight) 72%, var(--color-border));
+            background: var(--color-highlight);
+            color: #fff;
+        }
+
+        .trm-primary-action.is-compact {
+            min-height: 32px;
+        }
+
+        .trm-quiet-action {
+            background: var(--trm-raised, var(--color-panel));
+            color: var(--color-text);
+        }
+
+        .trm-danger-action {
+            background: color-mix(in srgb, var(--color-accent) 14%, var(--trm-raised, var(--color-panel)));
+            color: var(--color-text);
+        }
+
+        .trm-primary-action:hover:not(:disabled),
+        .trm-quiet-action:hover:not(:disabled),
+        .trm-danger-action:hover:not(:disabled),
+        .trm-ring-tile:hover,
+        .trm-result-row:hover {
+            border-color: var(--color-primary);
+            background: color-mix(in srgb, var(--color-primary) 18%, var(--trm-raised, var(--color-panel)));
+        }
+
+        .trm-primary-action:disabled,
+        .trm-quiet-action:disabled,
+        .trm-danger-action:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        .trm-primary-action .material-symbols-outlined,
+        .trm-quiet-action .material-symbols-outlined,
+        .trm-danger-action .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        .trm-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            min-height: 34px;
+            color: var(--color-text-muted);
+            font-size: 0.78rem;
+            cursor: pointer;
+        }
+
+        .trm-switch input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .trm-switch-track {
+            position: relative;
+            width: 34px;
+            height: 18px;
+            border: 1px solid var(--color-border);
+            border-radius: 999px;
+            background: var(--color-background);
+        }
+
+        .trm-switch-track::after {
+            content: "";
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            background: var(--color-text-muted);
+            transition: transform 120ms ease, background-color 120ms ease;
+        }
+
+        .trm-switch input:checked + .trm-switch-track {
+            border-color: var(--color-highlight);
+        }
+
+        .trm-switch input:checked + .trm-switch-track::after {
+            transform: translateX(16px);
+            background: var(--color-highlight);
+        }
+
+        .trm-ring-observatory {
+            display: grid;
+            grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+            gap: 14px;
+            padding: 14px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background:
+                radial-gradient(circle at 18% 24%, color-mix(in srgb, var(--trm-ring-cambium) 11%, transparent), transparent 36%),
+                linear-gradient(145deg, color-mix(in srgb, var(--trm-ring-heartwood) 8%, transparent), transparent 58%),
+                var(--trm-surface);
+            overflow: hidden;
+        }
+
+        .trm-ring-visual {
+            display: grid;
+            grid-template-columns: minmax(150px, 0.92fr) minmax(120px, 1.08fr);
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .trm-ring-map {
+            position: relative;
+            width: 100%;
+            max-width: 240px;
+            aspect-ratio: 1;
+            margin: auto;
+            border-radius: 50%;
+            background:
+                repeating-radial-gradient(circle, transparent 0 10px, color-mix(in srgb, var(--trm-ring-heartwood) 8%, transparent) 10px 11px),
+                radial-gradient(circle, color-mix(in srgb, var(--trm-ring-heartwood) 12%, var(--color-background)) 0 22%, var(--color-background) 68%);
+            box-shadow:
+                inset 0 0 34px color-mix(in srgb, var(--trm-ring-heartwood) 12%, transparent),
+                0 12px 34px color-mix(in srgb, #000 22%, transparent);
+        }
+
+        .trm-ring-map::after {
+            content: "";
+            position: absolute;
+            inset: 9%;
+            border: 1px solid color-mix(in srgb, var(--color-border) 54%, transparent);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .trm-ring-map svg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+            transform: rotate(-90deg);
+        }
+
+        .trm-usage-track,
+        .trm-usage-arc {
+            fill: none;
+            stroke-width: 8;
+        }
+
+        .trm-usage-track {
+            stroke: color-mix(in srgb, var(--color-border) 46%, transparent);
+        }
+
+        .trm-usage-arc {
+            stroke: var(--trm-ring-outer);
+            stroke-linecap: round;
+            stroke-dasharray: 0 100;
+            transition: stroke-dasharray 520ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms ease;
+        }
+
+        .trm-usage-arc[data-ring="cambium"] {
+            color: var(--trm-ring-cambium);
+            stroke: var(--trm-ring-cambium);
+        }
+
+        .trm-usage-arc[data-ring="outer"] {
+            color: var(--trm-ring-outer);
+        }
+
+        .trm-usage-arc[data-ring="inner"] {
+            color: var(--trm-ring-inner);
+            stroke: var(--trm-ring-inner);
+        }
+
+        .trm-usage-arc[data-ring="heartwood"] {
+            color: var(--trm-ring-heartwood);
+            stroke: var(--trm-ring-heartwood);
+        }
+
+        .trm-usage-arc[data-ring="scar"] {
+            color: var(--trm-ring-scar);
+            stroke: var(--trm-ring-scar);
+        }
+
+        .trm-usage-arc[data-ring="seed"] {
+            color: var(--trm-ring-seed);
+            stroke: var(--trm-ring-seed);
+        }
+
+        .trm-ring-core {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            display: flex;
+            align-items: center;
+            flex-direction: column;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .trm-ring-core strong {
+            color: var(--color-text);
+            font-size: clamp(1.25rem, 3vw, 1.85rem);
+            font-weight: 760;
+            line-height: 1;
+            text-shadow: 0 0 18px color-mix(in srgb, var(--trm-ring-heartwood) 40%, transparent);
+        }
+
+        .trm-ring-core span {
+            margin-top: 4px;
+            color: var(--color-text-muted);
+            font-size: 0.6rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .trm-ring-visual-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            min-width: 0;
+        }
+
+        .trm-eyebrow {
+            color: var(--trm-ring-cambium);
+            font-size: 0.66rem;
+            font-weight: 700;
+            letter-spacing: 0.11em;
+            text-transform: uppercase;
+        }
+
+        .trm-ring-visual-copy strong {
+            color: var(--color-text);
+            font-size: 1rem;
+            line-height: 1.2;
+        }
+
+        .trm-ring-visual-copy > span:last-child {
+            color: var(--color-text-muted);
+            font-size: 0.72rem;
+            line-height: 1.45;
+        }
+
+        .trm-ring-ledger {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            align-content: center;
+            gap: 8px;
+        }
+
+        .trm-ring-tile {
+            display: flex;
+            align-items: stretch;
+            flex-direction: column;
+            gap: 7px;
+            min-width: 0;
+            min-height: 72px;
+            padding: 10px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--color-background) 68%, transparent);
+            color: var(--color-text);
+            cursor: pointer;
+            font-family: var(--font-family-main);
+            text-align: left;
+            transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+        }
+
+        .trm-ring-tile.is-active {
+            border-color: var(--color-highlight);
+            background: color-mix(in srgb, var(--color-highlight) 10%, var(--color-background));
+            box-shadow: inset 3px 0 0 var(--color-highlight);
+        }
+
+        .trm-ring-tile:hover {
+            transform: translateY(-1px);
+        }
+
+        .trm-ring-tile-top,
+        .trm-ring-identity {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+        }
+
+        .trm-ring-tile-top {
+            justify-content: space-between;
+        }
+
+        .trm-ring-beacon {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--trm-ring-outer);
+            box-shadow: 0 0 10px currentColor;
+            flex: 0 0 auto;
+        }
+
+        .trm-ring-name {
+            overflow: hidden;
+            color: var(--color-text-muted);
+            font-size: 0.74rem;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .trm-ring-count {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+
+        .trm-result-ring::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--trm-ring-outer);
+            flex: 0 0 auto;
+        }
+
+        .trm-ring-tile[data-ring="cambium"] .trm-ring-beacon,
+        .trm-result-ring[data-ring="cambium"]::before {
+            color: var(--trm-ring-cambium);
+            background: var(--trm-ring-cambium);
+        }
+
+        .trm-ring-tile[data-ring="outer"] .trm-ring-beacon {
+            color: var(--trm-ring-outer);
+        }
+
+        .trm-ring-tile[data-ring="inner"] .trm-ring-beacon,
+        .trm-result-ring[data-ring="inner"]::before {
+            color: var(--trm-ring-inner);
+            background: var(--trm-ring-inner);
+        }
+
+        .trm-ring-tile[data-ring="heartwood"] .trm-ring-beacon,
+        .trm-result-ring[data-ring="heartwood"]::before {
+            color: var(--trm-ring-heartwood);
+            background: var(--trm-ring-heartwood);
+        }
+
+        .trm-ring-tile[data-ring="scar"] .trm-ring-beacon,
+        .trm-result-ring[data-ring="scar"]::before {
+            color: var(--trm-ring-scar);
+            background: var(--trm-ring-scar);
+        }
+
+        .trm-ring-tile[data-ring="seed"] .trm-ring-beacon,
+        .trm-result-ring[data-ring="seed"]::before {
+            color: var(--trm-ring-seed);
+            background: var(--trm-ring-seed);
+        }
+
+        .trm-ring-share {
+            color: var(--color-text-muted);
+            font-size: 0.68rem;
+        }
+
+        .trm-ring-meter {
+            display: block;
+            height: 3px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--color-border) 52%, transparent);
+            overflow: hidden;
+        }
+
+        .trm-ring-meter > span {
+            display: block;
+            width: 0;
+            height: 100%;
+            border-radius: inherit;
+            background: var(--trm-ring-outer);
+            transition: width 520ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        .trm-ring-tile[data-ring="cambium"] .trm-ring-meter > span { background: var(--trm-ring-cambium); }
+        .trm-ring-tile[data-ring="inner"] .trm-ring-meter > span { background: var(--trm-ring-inner); }
+        .trm-ring-tile[data-ring="heartwood"] .trm-ring-meter > span { background: var(--trm-ring-heartwood); }
+        .trm-ring-tile[data-ring="scar"] .trm-ring-meter > span { background: var(--trm-ring-scar); }
+        .trm-ring-tile[data-ring="seed"] .trm-ring-meter > span { background: var(--trm-ring-seed); }
+
+        .trm-workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1.08fr) minmax(280px, 0.92fr);
+            gap: 12px;
+            min-height: 320px;
+        }
+
+        .trm-results-pane,
+        .trm-detail-pane {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 320px;
+            overflow: hidden;
+        }
+
+        .trm-pane-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .trm-pane-title {
+            color: var(--color-text);
+            font-size: 0.92rem;
+            font-weight: 700;
+        }
+
+        .trm-result-list {
+            display: flex;
+            flex-direction: column;
+            overflow: auto;
+        }
+
+        .trm-result-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 100%;
+            padding: 12px;
+            border: 0;
+            border-bottom: 1px solid var(--trm-soft);
+            background: transparent;
+            color: var(--color-text);
+            cursor: pointer;
+            font-family: var(--font-family-main);
+            text-align: left;
+        }
+
+        .trm-result-row.is-selected {
+            background: color-mix(in srgb, var(--color-highlight) 14%, transparent);
+        }
+
+        .trm-result-topline,
+        .trm-detail-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .trm-result-ring {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--color-text-muted);
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .trm-result-score {
+            color: var(--color-text-muted);
+            font-size: 0.72rem;
+        }
+
+        .trm-result-summary {
+            color: var(--color-text);
+            font-size: 0.9rem;
+            line-height: 1.35;
+        }
+
+        .trm-empty-state,
+        .trm-detail-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            flex-direction: column;
+            gap: 8px;
+            padding: 32px 18px;
+            color: var(--color-text-muted);
+            text-align: center;
+        }
+
+        .trm-empty-state .material-symbols-outlined,
+        .trm-detail-empty .material-symbols-outlined {
+            color: var(--color-primary);
+            font-size: 34px;
+        }
+
+        .trm-empty-state strong,
+        .trm-detail-empty strong {
+            color: var(--color-text);
+            font-size: 0.94rem;
+        }
+
+        .trm-detail-card {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            gap: 12px;
+            padding: 14px;
+            overflow: auto;
+        }
+
+        .trm-detail-card h3 {
+            margin: 0;
+            color: var(--color-text);
+            font-size: 1.05rem;
+            line-height: 1.3;
+        }
+
+        .trm-detail-copy {
+            margin: 0;
+            color: var(--color-text-muted);
+            font-size: 0.84rem;
+            line-height: 1.45;
+            white-space: pre-wrap;
+        }
+
+        .trm-evidence-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin: 0;
+        }
+
+        .trm-evidence-grid div,
+        .trm-tags {
+            min-width: 0;
+            padding: 8px 10px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background: var(--color-background);
+        }
+
+        .trm-evidence-grid dt {
+            margin-bottom: 3px;
+            color: var(--color-text-muted);
+            font-size: 0.68rem;
+            text-transform: uppercase;
+        }
+
+        .trm-evidence-grid dd {
+            overflow: hidden;
+            margin: 0;
+            color: var(--color-text);
+            font-size: 0.78rem;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .trm-tags {
+            color: var(--color-text-muted);
+            font-size: 0.76rem;
+        }
+
+        .trm-tags .material-symbols-outlined {
+            font-size: 17px;
+        }
+
+        .trm-action-group,
+        .trm-danger-row {
+            flex-wrap: wrap;
+        }
+
+        .trm-export-path {
+            overflow: hidden;
+            padding: 8px 10px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .trm-maintenance-footer {
+            justify-content: stretch;
+            min-height: 48px;
+            padding: 8px 12px;
+            gap: 0;
+        }
+
+        .trm-maintenance-bar {
+            justify-content: space-between;
+            width: 100%;
+            gap: 10px;
+        }
+
+        .trm-maintenance-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--color-text-muted);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .trm-maintenance-label .material-symbols-outlined {
+            font-size: 18px;
+        }
+
+        .trm-maintenance-actions {
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+
+        .trm-maintenance-actions .trm-quiet-action,
+        .trm-maintenance-actions .trm-primary-action {
+            min-height: 30px;
+            padding: 0 10px;
+            font-size: 0.74rem;
+        }
+
+        .is-spinning {
+            animation: trm-spin 1s linear infinite;
+        }
+
+        @keyframes trm-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (max-width: 840px) {
+            .trm-panel-header {
+                grid-template-columns: 48px minmax(0, 1fr);
+            }
+
+            .trm-panel-stat {
+                grid-column: 1 / -1;
+                align-items: flex-start;
+            }
+
+            .trm-ring-observatory {
+                grid-template-columns: 1fr;
+            }
+
+            .trm-ring-visual {
+                grid-template-columns: minmax(160px, 0.7fr) minmax(180px, 1.3fr);
+            }
+
+            .trm-workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .trm-maintenance-bar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .trm-maintenance-actions {
+                justify-content: flex-start;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .trm-search-row {
+                flex-wrap: wrap;
+                padding: 8px;
+            }
+
+            .trm-search-row input {
+                flex-basis: calc(100% - 30px);
+            }
+
+            .trm-filter-row select,
+            .trm-primary-action,
+            .trm-quiet-action,
+            .trm-danger-action {
+                width: 100%;
+            }
+
+            .trm-ring-visual,
+            .trm-ring-ledger,
+            .trm-evidence-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .trm-ring-map {
+                width: min(78vw, 230px);
+            }
+        }
+    </style>
+</body>
+</html>

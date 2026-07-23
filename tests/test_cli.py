@@ -104,6 +104,74 @@ def test_recall_preserves_rust_ranking_before_host_filters(tmp_path):
     assert [item["id"] for item in result["results"]] == ["mem_first", "mem_second"]
 
 
+def test_include_all_agents_suppresses_context_defaults_but_keeps_explicit_filters(
+    tmp_path,
+):
+    binary = executable(tmp_path)
+    root = tmp_path / "memory"
+    create_schema_v3_store(root)
+    first = {
+        **_memory("mem_first", "2026-07-01T00:00:00Z", ring="outer"),
+        "agent_profile": "worker-a",
+        "workflow_id": "fanout-1",
+        "session_id": "session-a",
+    }
+    second = {
+        **_memory("mem_second", "2026-07-01T00:00:01Z", ring="outer"),
+        "agent_profile": "worker-b",
+        "workflow_id": "fanout-1",
+        "session_id": "session-b",
+    }
+    calls: list[list[str]] = []
+
+    def runner(command, **kwargs):
+        del kwargs
+        if "--version" in command:
+            return completed(command, "tree-ring 0.13.0\n")
+        calls.append(command)
+        return completed(
+            command,
+            json.dumps(
+                [
+                    {"memory": first, "score": 0.91, "ranking": {}},
+                    {"memory": second, "score": 0.72, "ranking": {}},
+                ]
+            ),
+        )
+
+    bridge = TreeRingCli(
+        config(root, binary),
+        context=InvocationContext(
+            agent_profile="coordinator",
+            workflow_id="fanout-1",
+            session_id="coordinator-session",
+        ),
+        runner=runner,
+    )
+
+    result = bridge.recall(
+        "worker result",
+        include_all_agents=True,
+        agent_profile="worker-a",
+        session_id="session-a",
+        limit=8,
+    )
+
+    assert calls[-1][calls[-1].index("recall") :] == [
+        "recall",
+        "worker result",
+        "--limit",
+        "100",
+        "--agent-profile",
+        "worker-a",
+        "--workflow-id",
+        "fanout-1",
+        "--session-id",
+        "session-a",
+    ]
+    assert [item["id"] for item in result["results"]] == ["mem_first"]
+
+
 def test_identity_is_explicit_and_ambient_identity_is_removed(tmp_path, monkeypatch):
     binary = executable(tmp_path)
     root = tmp_path / "memory"

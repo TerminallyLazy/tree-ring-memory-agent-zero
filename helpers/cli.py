@@ -96,7 +96,11 @@ class TreeRingCli:
             preflight = upgrade.inspect_store(self.config)
             data.update(preflight)
             data["initialized"] = bool(
-                preflight.get("present") and preflight.get("schema_version")
+                preflight.get("present")
+                and (
+                    preflight.get("schema_version")
+                    or preflight.get("legacy_unversioned")
+                )
             )
         except upgrade.SchemaUpgradeError as exc:
             data["initialized"] = False
@@ -122,8 +126,13 @@ class TreeRingCli:
             )
         elif data.get("upgrade_required"):
             prepared = " A verified backup is ready." if data.get("upgrade_prepared") else ""
+            source_schema = (
+                "unversioned v0.12"
+                if data.get("legacy_unversioned")
+                else f"schema-v{data.get('schema_version')}"
+            )
             data["error"] = (
-                f"Schema-v3 upgrade required for the existing schema-v{data.get('schema_version')} "
+                f"Schema-v3 upgrade required for the existing {source_schema} "
                 "store. Stop every Tree Ring process, create a verified backup, then apply the "
                 f"upgrade.{prepared}"
             )
@@ -177,8 +186,13 @@ class TreeRingCli:
                 f"than supported schema {upgrade.TARGET_SCHEMA_VERSION}."
             )
         if inspection.get("upgrade_required"):
+            source_schema = (
+                "unversioned v0.12"
+                if inspection.get("legacy_unversioned")
+                else f"schema-v{inspection.get('schema_version')}"
+            )
             raise TreeRingCliError(
-                f"Schema-v3 upgrade required for the existing schema-v{inspection.get('schema_version')} "
+                f"Schema-v3 upgrade required for the existing {source_schema} "
                 "store. Stop every Tree Ring process, create a verified backup, and explicitly "
                 "apply the upgrade before using this store."
             )

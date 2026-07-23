@@ -54,6 +54,23 @@ def create_v2_store(root: Path) -> Path:
     return database
 
 
+def create_unversioned_v012_store(root: Path) -> Path:
+    root.mkdir(parents=True)
+    database = root / "memory.sqlite"
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute(
+            "CREATE TABLE memories (id TEXT PRIMARY KEY, summary TEXT NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO memories (id, summary) VALUES ('mem_v012', 'keep v0.12')"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    return database
+
+
 def completed(command: list[str], stdout: str):
     return subprocess.CompletedProcess(command, 0, stdout, "")
 
@@ -80,6 +97,56 @@ def test_status_preflights_v2_without_opening_or_migrating_store(tmp_path):
     assert commands[0][-1] == "--version"
     assert database.read_bytes() == original
     assert not (root / "migrations").exists()
+
+
+def test_status_preflights_real_unversioned_v012_layout_without_migrating(
+    tmp_path,
+):
+    root = tmp_path / "memory"
+    database = create_unversioned_v012_store(root)
+    original = database.read_bytes()
+    binary = executable(tmp_path)
+    commands: list[list[str]] = []
+
+    def runner(command, **kwargs):
+        del kwargs
+        commands.append(command)
+        return completed(command, "tree-ring 0.13.0\n")
+
+    status = TreeRingCli(configured(root, binary), runner=runner).status()
+
+    assert status["ok"] is False
+    assert status["runtime_ok"] is True
+    assert status["initialized"] is True
+    assert status["schema_version"] == 0
+    assert status["legacy_unversioned"] is True
+    assert status["upgrade_required"] is True
+    assert "unversioned v0.12" in status["error"]
+    assert len(commands) == 1
+    assert commands[0][-1] == "--version"
+    assert database.read_bytes() == original
+    assert not (root / "migrations").exists()
+
+
+def test_unversioned_v012_backup_is_exact_private_and_verified(tmp_path):
+    root = tmp_path / "memory"
+    database = create_unversioned_v012_store(root)
+    binary = executable(tmp_path)
+
+    def runner(command, **kwargs):
+        del kwargs
+        return completed(command, "tree-ring 0.13.0\n")
+
+    bridge = TreeRingCli(configured(root, binary), runner=runner)
+    report = bridge.prepare_schema_upgrade(confirm_offline=True)
+    backup = Path(report["backup_path"])
+
+    assert report["schema_version"] == 0
+    assert report["upgrade_prepared"] is True
+    assert report["memory_count"] == 1
+    assert backup.read_bytes() == database.read_bytes()
+    assert report["backup_sha256"] == hashlib.sha256(backup.read_bytes()).hexdigest()
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o600
 
 
 def test_upgrade_backup_is_exact_private_and_integrity_verified(tmp_path):

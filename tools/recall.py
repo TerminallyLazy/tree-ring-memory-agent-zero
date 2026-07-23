@@ -18,6 +18,11 @@ class Recall(Tool):
                 query,
                 project=kwargs.get("project") or None,
                 agent_profile=kwargs.get("agent_profile") or None,
+                workflow_id=kwargs.get("workflow_id") or None,
+                session_id=kwargs.get("session_id") or None,
+                include_all_agents=parse_bool(
+                    kwargs.get("include_all_agents"), False
+                ),
                 scope=kwargs.get("scope") or None,
                 rings=kwargs.get("rings") or None,
                 event_types=kwargs.get("event_types") or None,

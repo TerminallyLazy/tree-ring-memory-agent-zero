@@ -9,7 +9,7 @@ from usr.plugins.tree_ring_memory import hooks
 
 def config(root: Path) -> dict:
     return {
-        "cli": {"binary": "tree-ring", "required_version": "0.12.0", "timeout_seconds": 10},
+        "cli": {"binary": "tree-ring", "required_version": "0.13.0", "timeout_seconds": 10},
         "storage": {"root": str(root), "legacy_sqlite_path": str(root / "indexes" / "memory.sqlite")},
     }
 
@@ -37,6 +37,10 @@ def test_bootstrap_initializes_migrates_and_audits(tmp_path, monkeypatch):
             events.append(f"audit:{audit_type}")
             return {"memory_count": 3, "finding_count": 0}
 
+        def policy_status(self):
+            events.append("policy_status")
+            return {"mode": "open"}
+
     class Migrator:
         def __init__(self, resolved, *, cli):
             assert resolved["storage"]["root"] == str(tmp_path)
@@ -52,7 +56,15 @@ def test_bootstrap_initializes_migrates_and_audits(tmp_path, monkeypatch):
 
     report = hooks.bootstrap_runtime(config(tmp_path))
 
-    assert events == ["directories", "status", "init", "migrate:True", "audit:all", "status"]
+    assert events == [
+        "directories",
+        "status",
+        "init",
+        "policy_status",
+        "migrate:True",
+        "audit:all",
+        "status",
+    ]
     assert report["ok"] is True
     assert report["initialized_now"] is True
     assert report["migration"]["legacy_preserved"] is True
@@ -84,3 +96,35 @@ def test_bootstrap_fails_closed_when_cli_is_unavailable(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="automatic setup failed: unsupported runtime"):
         hooks.bootstrap_runtime(config(tmp_path))
+
+
+def test_bootstrap_reports_v2_upgrade_without_opening_store(tmp_path, monkeypatch):
+    calls: list[str] = []
+
+    class Bridge:
+        def __init__(self, resolved):
+            del resolved
+
+        def status(self):
+            calls.append("status")
+            return {
+                "ok": False,
+                "runtime_ok": True,
+                "initialized": True,
+                "schema_version": 2,
+                "upgrade_required": True,
+            }
+
+        def init(self):
+            calls.append("init")
+            raise AssertionError("schema-v2 store must not be opened")
+
+    monkeypatch.setattr(hooks.paths, "ensure_memory_dirs", lambda resolved: None)
+    monkeypatch.setattr(hooks, "TreeRingCli", Bridge)
+
+    report = hooks.bootstrap_runtime(config(tmp_path))
+
+    assert report["ok"] is True
+    assert report["ready"] is False
+    assert report["upgrade_required"] is True
+    assert calls == ["status"]

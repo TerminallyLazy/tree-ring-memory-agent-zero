@@ -1,7 +1,7 @@
 enabled: true
 cli:
   binary: tree-ring
-  required_version: 0.12.0
+  required_version: 0.13.0
   timeout_seconds: 30
 storage:
   root: /a0/usr/memory/tree_ring_memory
@@ -10,6 +10,8 @@ scope:
   default_project_scope: current_project
   allow_global: true
   allow_cross_project_recall: false
+coordination:
+  coordinator_profiles: []
 recall:
   max_results_default: 8
   bridge_scan_limit: 100

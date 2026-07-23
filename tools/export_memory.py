@@ -19,9 +19,9 @@ class ExportMemory(Tool):
         **kwargs,
     ):
         if kwargs.get("format") not in (None, "", "jsonl"):
-            return tool_error("tree-ring 0.12 exports canonical JSONL only.")
+            return tool_error("tree-ring 0.13 exports canonical JSONL only.")
         if kwargs.get("memory_ids"):
-            return tool_error("tree-ring 0.12 does not expose selected-memory export.")
+            return tool_error("tree-ring 0.13 does not expose selected-memory export.")
         bridge, _ = bridge_and_config(getattr(self, "agent", None))
         try:
             data = bridge.export_to_file(

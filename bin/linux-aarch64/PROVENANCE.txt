@@ -1,0 +1,11 @@
+source_repository=https://github.com/TerminallyLazy/Tree-Ring-Memory
+source_tag=v0.13.0
+source_commit=167bc655e001112ff5593d7af0984b3e8689ea1a
+build_image=rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1
+runner=ubuntu-24.04-arm
+machine=aarch64
+rustc=rustc 1.95.0 (59807616e 2026-04-14)
+cargo=cargo 1.95.0 (f2d3ce0bd 2026-03-21)
+glibc=ldd (Debian GLIBC 2.36-9+deb12u14) 2.36
+maximum_required_glibc=GLIBC_2.34
+binary_version=tree-ring 0.13.0

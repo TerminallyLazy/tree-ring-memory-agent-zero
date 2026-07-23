@@ -109,7 +109,7 @@
                             Export diagnostics
                         </button>
                     </div>
-                    <p class="trm-footnote">A schema-v2 store is never auto-opened. Stop every Tree Ring process first; the backup helper checkpoints WAL, creates a mode-0600 byte-for-byte backup, verifies its checksum and SQLite integrity, and requires a second explicit action before migration. Legacy Python-v1 validation remains dry-run; durable import is automatic only while the write policy is open.</p>
+                    <p class="trm-footnote">An unversioned v0.12 or versioned schema-v1/v2 store is never auto-opened. Stop every Tree Ring process first; the backup helper checkpoints WAL, creates a mode-0600 byte-for-byte backup, verifies its checksum and SQLite integrity, and requires a second explicit action before migration. Legacy Python-v1 validation remains dry-run; durable import is automatic only while the write policy is open.</p>
                 </section>
 
                 <section class="trm-settings-card">

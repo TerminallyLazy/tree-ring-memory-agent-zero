@@ -52,3 +52,4 @@ def test_webui_shows_explicit_two_step_schema_upgrade_controls():
     assert "confirm_offline: true" in store
     assert "Create verified upgrade backup" in config
     assert "Apply schema v3" in config
+    assert "unversioned v0.12 or versioned schema-v1/v2" in config

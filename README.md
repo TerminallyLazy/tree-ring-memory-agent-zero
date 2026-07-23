@@ -12,7 +12,7 @@ In Agent Zero, open **Plugins → Install**, choose the Git repository option, a
 https://github.com/TerminallyLazy/tree-ring-memory-agent-zero
 ```
 
-The installer clones this repository into `usr/plugins/tree_ring_memory`, then `hooks.py` validates the packaged CLI and initializes a new Rust store. Existing memory under `usr/memory/tree_ring_memory` is preserved across updates and uninstall. An existing schema-v1/v2 Rust store is detected before the CLI can open it and waits for the explicit offline schema-v3 workflow below. The community marketplace entry uses the same repository and manifest.
+The installer clones this repository into `usr/plugins/tree_ring_memory`, then `hooks.py` validates the packaged CLI and initializes a new Rust store. Existing memory under `usr/memory/tree_ring_memory` is preserved across updates and uninstall. An unversioned v0.12 or versioned schema-v1/v2 Rust store is detected before the CLI can open it and waits for the explicit offline schema-v3 workflow below. The community marketplace entry uses the same repository and manifest.
 
 ## Requirements
 
@@ -58,7 +58,7 @@ Uninstall preserves both stores. Removing the memory root remains a deliberate o
 
 ## v0.13 Schema-v3 Upgrade
 
-The plugin never lets a v0.13 CLI auto-open an existing schema-v1/v2 store. The dashboard and settings report `upgrade_required` while normal store operations remain blocked.
+The plugin never lets a v0.13 CLI auto-open an existing unversioned v0.12 or versioned schema-v1/v2 store. The dashboard and settings report `upgrade_required` while normal store operations remain blocked.
 
 Treat the upgrade as an offline, one-way operation:
 
@@ -86,7 +86,7 @@ Every Agent Zero tool invocation derives its Tree Ring identity from the live se
 - `workflow_id` is the parent context for parallel fan-out workers and otherwise the current context.
 - `operation_id` and `source_ref` are explicit tool inputs and are forwarded unchanged so a retry can reuse the same logical write identity and provenance.
 
-The caller cannot set write identity through API payload fields. Recall can intentionally request a wider fan-in view with `include_all_agents=true`; that omits the agent/session filter while retaining the shared workflow filter.
+The caller cannot set write identity through API payload fields. Recall can intentionally request a wider fan-in view with `include_all_agents=true`; that suppresses the current context's default agent/session filters while preserving any explicit agent, workflow, session, or scope filters.
 
 Every subprocess starts from a copy of the host environment with `TREE_RING_COORDINATOR_TOKEN` and all Tree Ring identity environment variables removed. A coordinator capability is reinserted only when both conditions hold:
 
@@ -127,7 +127,7 @@ When the CLI is missing or incompatible, the panel stays available and shows the
 
 ## Lifecycle and Maintenance
 
-`hooks.py` owns automatic setup. Its install hook is idempotent, and Agent Zero runs it after both fresh installs and updates. The configuration hook provides a second idempotent bootstrap path after an update so older installations cannot remain dependent on the removed `execute.py` script. A schema-v1/v2 preflight returns without opening the database. Before later updates, the hook exports an initialized compatible store as a recovery snapshot.
+`hooks.py` owns automatic setup. Its install hook is idempotent, and Agent Zero runs it after both fresh installs and updates. The configuration hook provides a second idempotent bootstrap path after an update so older installations cannot remain dependent on the removed `execute.py` script. An unversioned v0.12 or versioned schema-v1/v2 preflight returns without opening the database. Before later updates, the hook exports an initialized compatible store as a recovery snapshot.
 
 Interactive audit, consolidation, FTS repair, DOX/Revolve previews, import preview, and export remain available through the Web UI and Agent Zero tools. Sensitive recall and export remain opt-in. DOX `AGENTS.md`, Revolve evidence, current source, tests, and explicit user instructions remain authoritative over recalled memory.
 

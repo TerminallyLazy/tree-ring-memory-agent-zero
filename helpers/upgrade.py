@@ -37,19 +37,29 @@ def inspect_store(config: dict[str, Any]) -> dict[str, Any]:
         connection = _open_read_only(database)
         try:
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            has_memories = (
+                connection.execute(
+                    "SELECT 1 FROM sqlite_master "
+                    "WHERE type='table' AND name='memories'"
+                ).fetchone()
+                is not None
+            )
         finally:
             connection.close()
     except sqlite3.Error as exc:
         raise SchemaUpgradeError(f"Unable to inspect the Tree Ring SQLite schema: {exc}") from exc
 
+    legacy_unversioned = version == 0 and has_memories
     marker = _read_marker(config)
     prepared = bool(marker and _marker_matches_source(marker, database, check_hash=False))
     return {
         "present": True,
         "path": str(database),
         "schema_version": version,
+        "legacy_unversioned": legacy_unversioned,
         "target_schema_version": TARGET_SCHEMA_VERSION,
-        "upgrade_required": 0 < version < TARGET_SCHEMA_VERSION,
+        "upgrade_required": legacy_unversioned
+        or 0 < version < TARGET_SCHEMA_VERSION,
         "upgrade_prepared": prepared,
         "unsupported_schema": version > TARGET_SCHEMA_VERSION,
     }
@@ -75,7 +85,12 @@ def prepare_schema_upgrade(
             **inspection,
             "message": "The Tree Ring store already uses schema v3.",
         }
-    if not isinstance(version, int) or version <= 0 or version > TARGET_SCHEMA_VERSION:
+    if (
+        not isinstance(version, int)
+        or version < 0
+        or version > TARGET_SCHEMA_VERSION
+        or (version == 0 and not inspection.get("legacy_unversioned"))
+    ):
         raise SchemaUpgradeError(
             f"Schema version {version!r} cannot be prepared for the v0.13 schema-v3 upgrade."
         )

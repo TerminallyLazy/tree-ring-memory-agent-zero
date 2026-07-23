@@ -11,12 +11,25 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from usr.plugins.tree_ring_memory.helpers import paths
+from usr.plugins.tree_ring_memory.helpers import paths, upgrade
 from usr.plugins.tree_ring_memory.helpers.config import load_config
+from usr.plugins.tree_ring_memory.helpers.context import (
+    InvocationContext,
+    coordinator_profiles,
+)
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 VERSION_RE = re.compile(r"\btree-ring\s+(\d+)\.(\d+)\.(\d+)(?:[-+][^\s]+)?")
+COORDINATOR_TOKEN_ENV = "TREE_RING_COORDINATOR_TOKEN"
+IDENTITY_ENV_VARS = (
+    COORDINATOR_TOKEN_ENV,
+    "TREE_RING_AGENT_PROFILE",
+    "TREE_RING_WORKFLOW_ID",
+    "TREE_RING_SESSION_ID",
+    "TREE_RING_OPERATION_ID",
+)
+CAPABILITY_RE = re.compile(r"trcap_v1_[a-f0-9]{64}", re.IGNORECASE)
 
 
 class TreeRingCliError(RuntimeError):
@@ -30,16 +43,23 @@ class TreeRingCli:
     writes cross the public ``tree-ring`` command surface.
     """
 
-    def __init__(self, config: dict[str, Any] | None = None, *, runner: Runner | None = None) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        *,
+        context: InvocationContext | None = None,
+        runner: Runner | None = None,
+    ) -> None:
         self.config = load_config(config)
         self.root = paths.memory_root(self.config)
+        self.context = context or InvocationContext()
         self.runner = runner or subprocess.run
         self._binary: Path | None = None
         self._version: str | None = None
 
     @property
     def required_version(self) -> str:
-        return str((self.config.get("cli") or {}).get("required_version") or "0.12.0")
+        return str((self.config.get("cli") or {}).get("required_version") or "0.13.0")
 
     @property
     def binary(self) -> Path:
@@ -64,26 +84,105 @@ class TreeRingCli:
         marker = paths.migration_marker_path(self.config)
         data: dict[str, Any] = {
             "ok": False,
+            "runtime_ok": False,
             "required_version": self.required_version,
             "root": str(self.root),
             "sqlite_path": str(paths.canonical_sqlite_path(self.config)),
-            "initialized": paths.canonical_sqlite_path(self.config).is_file(),
             "legacy_sqlite_path": str(legacy),
             "legacy_store_present": legacy.is_file(),
             "legacy_migration_pending": legacy.is_file() and not marker.is_file(),
         }
         try:
-            data.update({"binary": str(self.binary), "version": self.version, "ok": True})
+            preflight = upgrade.inspect_store(self.config)
+            data.update(preflight)
+            data["initialized"] = bool(
+                preflight.get("present") and preflight.get("schema_version")
+            )
+        except upgrade.SchemaUpgradeError as exc:
+            data["initialized"] = False
+            data["error"] = str(exc)
+            return data
+
+        try:
+            data.update(
+                {
+                    "binary": str(self.binary),
+                    "version": self.version,
+                    "runtime_ok": True,
+                }
+            )
         except TreeRingCliError as exc:
             data["error"] = str(exc)
+            return data
+
+        if data.get("unsupported_schema"):
+            data["error"] = (
+                f"Tree Ring SQLite schema {data.get('schema_version')} is newer than "
+                f"the supported schema {upgrade.TARGET_SCHEMA_VERSION}."
+            )
+        elif data.get("upgrade_required"):
+            prepared = " A verified backup is ready." if data.get("upgrade_prepared") else ""
+            data["error"] = (
+                f"Schema-v3 upgrade required for the existing schema-v{data.get('schema_version')} "
+                "store. Stop every Tree Ring process, create a verified backup, then apply the "
+                f"upgrade.{prepared}"
+            )
+        else:
+            data["ok"] = True
         return data
 
     def init(self) -> dict[str, Any]:
         paths.ensure_memory_dirs(self.config)
-        return self._run_json(["init"])
+        inspection = upgrade.inspect_store(self.config)
+        migrating = bool(inspection.get("upgrade_required"))
+        if migrating:
+            upgrade.verify_prepared_upgrade(self.config)
+        result = _require_dict(self._run_json(["init"]), "init")
+        final = upgrade.inspect_store(self.config)
+        if final.get("schema_version") != upgrade.TARGET_SCHEMA_VERSION:
+            raise TreeRingCliError(
+                f"tree-ring init did not produce SQLite schema {upgrade.TARGET_SCHEMA_VERSION}."
+            )
+        if migrating:
+            upgrade.mark_upgrade_completed(self.config, cli_version=self.version)
+        return result
+
+    def prepare_schema_upgrade(self, *, confirm_offline: bool) -> dict[str, Any]:
+        _ = self.version
+        return upgrade.prepare_schema_upgrade(
+            self.config, confirm_offline=confirm_offline
+        )
+
+    def apply_schema_upgrade(self, *, confirm_offline: bool) -> dict[str, Any]:
+        if not confirm_offline:
+            raise TreeRingCliError(
+                "Explicit offline confirmation is required before applying schema v3."
+            )
+        upgrade.verify_prepared_upgrade(self.config)
+        result = self.init()
+        audit = self.audit("all")
+        return {
+            "ok": True,
+            "init": result,
+            "audit": audit,
+            "status": self.status(),
+            "message": "The verified store backup was preserved and schema v3 is active.",
+        }
 
     def ensure_initialized(self) -> None:
-        if not paths.canonical_sqlite_path(self.config).is_file():
+        inspection = upgrade.inspect_store(self.config)
+        if inspection.get("unsupported_schema"):
+            raise TreeRingCliError(
+                f"Tree Ring SQLite schema {inspection.get('schema_version')} is newer "
+                f"than supported schema {upgrade.TARGET_SCHEMA_VERSION}."
+            )
+        if inspection.get("upgrade_required"):
+            raise TreeRingCliError(
+                f"Schema-v3 upgrade required for the existing schema-v{inspection.get('schema_version')} "
+                "store. Stop every Tree Ring process, create a verified backup, and explicitly "
+                "apply the upgrade before using this store."
+            )
+        if not inspection.get("present") or not inspection.get("schema_version"):
             self.init()
 
     def remember(
@@ -92,18 +191,37 @@ class TreeRingCli:
         *,
         event_type: str,
         ring: str = "cambium",
-        scope: str = "global",
+        scope: str = "agent",
         project: str | None = None,
+        operation_id: str | None = None,
+        source_ref: str | None = None,
         tags: Iterable[str] | None = None,
     ) -> dict[str, Any]:
         self.ensure_initialized()
-        args = ["remember", summary, "--event-type", event_type, "--ring", ring, "--scope", scope]
-        if project:
-            args.extend(["--project", project])
+        args = [
+            "remember",
+            summary,
+            "--event-type",
+            event_type,
+            "--ring",
+            ring,
+            "--scope",
+            scope,
+        ]
+        args.extend(self._identity_args(project=project))
+        if operation_id:
+            args.extend(["--operation-id", operation_id])
+        if source_ref:
+            args.extend(["--source-ref", source_ref])
         for tag in tags or ():
             if str(tag).strip():
                 args.extend(["--tag", str(tag).strip()])
-        payload = self._run_json(args)
+        protected = (
+            ring.strip().lower() == "heartwood"
+            or scope.strip().lower() != "agent"
+            or not self.context.agent_profile
+        )
+        payload = self._run_json(args, protected=protected)
         return _require_dict(payload, "remember")
 
     def evidence(
@@ -113,14 +231,16 @@ class TreeRingCli:
         evidence_ref: str,
         outcome: str = "observed",
         project: str | None = None,
+        operation_id: str | None = None,
         details: str | None = None,
         score: float | None = None,
         tags: Iterable[str] | None = None,
     ) -> dict[str, Any]:
         self.ensure_initialized()
         args = ["evidence", summary, "--outcome", outcome, "--evidence-ref", evidence_ref]
-        if project:
-            args.extend(["--project", project])
+        args.extend(self._identity_args(project=project))
+        if operation_id:
+            args.extend(["--operation-id", operation_id])
         if details:
             args.extend(["--details", details])
         if score is not None:
@@ -128,7 +248,7 @@ class TreeRingCli:
         for tag in tags or ():
             if str(tag).strip():
                 args.extend(["--tag", str(tag).strip()])
-        return _require_dict(self._run_json(args), "evidence")
+        return _require_dict(self._run_json(args, protected=True), "evidence")
 
     def recall(
         self,
@@ -136,6 +256,9 @@ class TreeRingCli:
         *,
         project: str | None = None,
         agent_profile: str | None = None,
+        workflow_id: str | None = None,
+        session_id: str | None = None,
+        include_all_agents: bool = False,
         scope: str | None = None,
         rings: list[str] | None = None,
         event_types: list[str] | None = None,
@@ -145,15 +268,40 @@ class TreeRingCli:
         explain_ranking: bool = False,
     ) -> dict[str, Any]:
         if include_superseded:
-            raise TreeRingCliError("tree-ring 0.12 recall does not expose superseded memories.")
+            raise TreeRingCliError("tree-ring 0.13 recall does not expose superseded memories.")
         self.ensure_initialized()
-        requested_limit = max(1, min(100, int(limit or (self.config.get("recall") or {}).get("max_results_default", 8))))
+        requested_limit = max(
+            1,
+            min(
+                100,
+                int(
+                    limit
+                    or (self.config.get("recall") or {}).get(
+                        "max_results_default", 8
+                    )
+                ),
+            ),
+        )
+        effective_project = project or self.context.project
+        effective_agent = (
+            None
+            if include_all_agents
+            else (agent_profile or self.context.agent_profile)
+        )
+        effective_workflow = workflow_id or self.context.workflow_id
+        effective_session = (
+            None
+            if include_all_agents
+            else (session_id or self.context.session_id)
+        )
         if not query.strip():
             memories = self.list_memories(include_sensitive=include_sensitive, include_superseded=False)
             results = self._filter_memories(
                 memories,
-                project=project,
-                agent_profile=agent_profile,
+                project=effective_project,
+                agent_profile=effective_agent,
+                workflow_id=effective_workflow,
+                session_id=effective_session,
                 scope=scope,
                 rings=rings,
                 event_types=event_types,
@@ -169,8 +317,16 @@ class TreeRingCli:
             int((self.config.get("recall") or {}).get("bridge_scan_limit", 100)),
         )
         args = ["recall", query, "--limit", str(min(1000, scan_limit))]
-        if project:
-            args.extend(["--project", project])
+        if effective_project:
+            args.extend(["--project", effective_project])
+        if effective_agent:
+            args.extend(["--agent-profile", effective_agent])
+        if effective_workflow:
+            args.extend(["--workflow-id", effective_workflow])
+        if effective_session:
+            args.extend(["--session-id", effective_session])
+        if scope:
+            args.extend(["--scope", scope])
         if include_sensitive:
             args.append("--include-sensitive")
         payload = self._run_json(args)
@@ -187,8 +343,10 @@ class TreeRingCli:
             flattened.append(memory)
         filtered = self._filter_memories(
             flattened,
-            project=project,
-            agent_profile=agent_profile,
+            project=effective_project,
+            agent_profile=effective_agent,
+            workflow_id=effective_workflow,
+            session_id=effective_session,
             scope=scope,
             rings=rings,
             event_types=event_types,
@@ -219,6 +377,7 @@ class TreeRingCli:
                 record = json.loads(line)
             except json.JSONDecodeError as exc:
                 raise TreeRingCliError(f"tree-ring export returned invalid JSONL at line {line_number}.") from exc
+            record = self._redact_payload(record)
             if record.get("type") == "memory_event" and isinstance(record.get("memory"), dict):
                 memories.append(record["memory"])
         return memories
@@ -240,15 +399,54 @@ class TreeRingCli:
     def forget(self, memory_id: str, *, mode: str, reason: str) -> dict[str, Any]:
         self.ensure_initialized()
         if mode not in {"delete", "redact"}:
-            raise TreeRingCliError("tree-ring 0.12 forget supports only delete or redact.")
+            raise TreeRingCliError("tree-ring 0.13 forget supports only delete or redact.")
         return _require_dict(
-            self._run_json(["forget", memory_id, "--mode", mode, "--reason", reason]),
+            self._run_json(
+                ["forget", memory_id, "--mode", mode, "--reason", reason],
+                protected=True,
+            ),
             "forget",
         )
 
     def audit(self, audit_type: str = "all") -> dict[str, Any]:
-        self.ensure_initialized()
+        self._require_existing_schema_v3()
         return _require_dict(self._run_json(["audit", "--audit-type", audit_type]), "audit")
+
+    def policy_status(self) -> dict[str, Any]:
+        self._require_existing_schema_v3()
+        return _require_dict(self._run_json(["policy", "status"]), "policy status")
+
+    def policy_audit(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        self._require_existing_schema_v3()
+        parsed_limit = int(limit)
+        if not 1 <= parsed_limit <= 1000:
+            raise TreeRingCliError("Policy audit limit must be between 1 and 1000.")
+        payload = self._run_json(
+            ["policy", "audit", "--limit", str(parsed_limit)]
+        )
+        if not isinstance(payload, list):
+            raise TreeRingCliError(
+                "tree-ring policy audit returned an unexpected JSON shape."
+            )
+        return [entry for entry in payload if isinstance(entry, dict)]
+
+    def _require_existing_schema_v3(self) -> None:
+        inspection = upgrade.inspect_store(self.config)
+        version = inspection.get("schema_version")
+        if not inspection.get("present"):
+            raise TreeRingCliError(
+                "The Tree Ring store is not initialized; this read-only operation will not create it."
+            )
+        if inspection.get("unsupported_schema"):
+            raise TreeRingCliError(
+                f"Tree Ring SQLite schema {version} is newer than supported schema "
+                f"{upgrade.TARGET_SCHEMA_VERSION}."
+            )
+        if version != upgrade.TARGET_SCHEMA_VERSION:
+            raise TreeRingCliError(
+                f"Schema-v3 upgrade required for the existing schema-v{version} store. "
+                "This read-only operation will not initialize or migrate it."
+            )
 
     def consolidate(
         self,
@@ -256,6 +454,9 @@ class TreeRingCli:
         period_type: str = "daily",
         period_key: str | None = None,
         project: str | None = None,
+        agent_profile: str | None = None,
+        workflow_id: str | None = None,
+        session_id: str | None = None,
         dry_run: bool = False,
         force: bool = False,
     ) -> dict[str, Any]:
@@ -263,13 +464,25 @@ class TreeRingCli:
         args = ["consolidate", "--period-type", period_type]
         if period_key:
             args.extend(["--period-key", period_key])
-        if project:
-            args.extend(["--project", project])
+        effective_project = project or self.context.project
+        effective_agent = agent_profile or self.context.agent_profile
+        effective_workflow = workflow_id or self.context.workflow_id
+        effective_session = session_id or self.context.session_id
+        if effective_project:
+            args.extend(["--project", effective_project])
+        if effective_agent:
+            args.extend(["--agent-profile", effective_agent])
+        if effective_workflow:
+            args.extend(["--workflow-id", effective_workflow])
+        if effective_session:
+            args.extend(["--session-id", effective_session])
         if dry_run:
             args.append("--dry-run")
         if force:
             args.append("--force")
-        return _require_dict(self._run_json(args), "consolidate")
+        return _require_dict(
+            self._run_json(args, protected=not dry_run), "consolidate"
+        )
 
     def maintain(
         self,
@@ -282,8 +495,9 @@ class TreeRingCli:
     ) -> dict[str, Any]:
         self.ensure_initialized()
         args = ["maintain"]
-        if project:
-            args.extend(["--project", project])
+        effective_project = project or self.context.project
+        if effective_project:
+            args.extend(["--project", effective_project])
         if include_superseded:
             args.append("--include-superseded")
         if apply_expired:
@@ -292,7 +506,10 @@ class TreeRingCli:
             args.append("--apply-secret-redactions")
         if repair_fts:
             args.append("--repair-fts")
-        return _require_dict(self._run_json(args), "maintain")
+        protected = apply_expired or apply_secret_redactions or repair_fts
+        return _require_dict(
+            self._run_json(args, protected=protected), "maintain"
+        )
 
     def export_to_file(
         self,
@@ -331,11 +548,14 @@ class TreeRingCli:
         self.ensure_initialized()
         source = paths.safe_project_root(self.config, source_root)
         args = ["dox", "sync", "--source-root", str(source)]
-        if project:
-            args.extend(["--project", project])
+        effective_project = project or self.context.project
+        if effective_project:
+            args.extend(["--project", effective_project])
         if dry_run:
             args.append("--dry-run")
-        return _require_dict(self._run_json(args), "dox sync")
+        return _require_dict(
+            self._run_json(args, protected=not dry_run), "dox sync"
+        )
 
     def sync_revolve(
         self, *, source_root: str | None = None, project: str | None = None, dry_run: bool = False
@@ -343,11 +563,14 @@ class TreeRingCli:
         self.ensure_initialized()
         source = paths.safe_project_root(self.config, source_root or "revolve")
         args = ["revolve", "sync", "--source-root", str(source)]
-        if project:
-            args.extend(["--project", project])
+        effective_project = project or self.context.project
+        if effective_project:
+            args.extend(["--project", effective_project])
         if dry_run:
             args.append("--dry-run")
-        return _require_dict(self._run_json(args), "revolve sync")
+        return _require_dict(
+            self._run_json(args, protected=not dry_run), "revolve sync"
+        )
 
     def integrations_scan(self, *, source_root: str | None = None) -> dict[str, Any]:
         source = paths.safe_project_root(self.config, source_root)
@@ -364,7 +587,9 @@ class TreeRingCli:
             args.append("--dry-run")
         if replace_existing:
             args.append("--replace-existing")
-        return _require_dict(self._run_json(args), "import")
+        return _require_dict(
+            self._run_json(args, protected=not dry_run), "import"
+        )
 
     def _filter_memories(
         self,
@@ -372,6 +597,8 @@ class TreeRingCli:
         *,
         project: str | None,
         agent_profile: str | None,
+        workflow_id: str | None,
+        session_id: str | None,
         scope: str | None,
         rings: list[str] | None,
         event_types: list[str] | None,
@@ -382,6 +609,10 @@ class TreeRingCli:
                 continue
             if agent_profile and memory.get("agent_profile") != agent_profile:
                 continue
+            if workflow_id and memory.get("workflow_id") != workflow_id:
+                continue
+            if session_id and memory.get("session_id") != session_id:
+                continue
             if scope and memory.get("scope") != scope:
                 continue
             if rings and memory.get("ring") not in rings:
@@ -391,21 +622,56 @@ class TreeRingCli:
             results.append(memory)
         return results
 
-    def _run_json(self, args: list[str]) -> Any:
-        output = self._invoke(args).stdout.strip()
+    def _identity_args(self, *, project: str | None) -> list[str]:
+        args: list[str] = []
+        effective_project = self._bound_write_project(project)
+        if effective_project:
+            args.extend(["--project", effective_project])
+        if self.context.agent_profile:
+            args.extend(["--agent-profile", self.context.agent_profile])
+        if self.context.workflow_id:
+            args.extend(["--workflow-id", self.context.workflow_id])
+        if self.context.session_id:
+            args.extend(["--session-id", self.context.session_id])
+        return args
+
+    def _bound_write_project(self, project: str | None) -> str | None:
+        requested = project.strip() if project else None
+        active = self.context.project
+        if active and requested and requested != active:
+            raise TreeRingCliError(
+                "Write project must match the active Agent Zero project context."
+            )
+        return active or requested
+
+    def _run_json(self, args: list[str], *, protected: bool = False) -> Any:
+        output = self._invoke(args, protected=protected).stdout.strip()
         try:
-            return json.loads(output)
+            return self._redact_payload(json.loads(output))
         except json.JSONDecodeError as exc:
             raise TreeRingCliError("tree-ring returned invalid JSON for a scriptable command.") from exc
 
-    def _invoke(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+    def _invoke(
+        self, args: list[str], *, protected: bool = False
+    ) -> subprocess.CompletedProcess[str]:
+        # Reject capability material before even probing the binary version.
+        # This keeps an untrusted field from ever entering a process argv.
+        self._assert_no_capability_arguments(args)
         _ = self.version
         command = [str(self.binary), "--root", str(self.root), "--json", *args]
-        return self._run_process(command, include_cwd=True)
+        return self._run_process(
+            command, include_cwd=True, protected=protected
+        )
 
     def _run_process(
-        self, command: list[str], *, include_cwd: bool
+        self,
+        command: list[str],
+        *,
+        include_cwd: bool,
+        protected: bool = False,
     ) -> subprocess.CompletedProcess[str]:
+        # Defense in depth for every subprocess call, including version probes.
+        self._assert_no_capability_arguments(command)
         timeout = int((self.config.get("cli") or {}).get("timeout_seconds", 30))
         try:
             result = self.runner(
@@ -415,6 +681,7 @@ class TreeRingCli:
                 timeout=timeout,
                 check=False,
                 cwd=str(paths.REPO_ROOT) if include_cwd else None,
+                env=self._process_environment(protected=protected),
             )
         except FileNotFoundError as exc:
             raise TreeRingCliError("tree-ring is not installed for the Agent Zero framework runtime.") from exc
@@ -424,8 +691,55 @@ class TreeRingCli:
             raise TreeRingCliError(f"tree-ring could not start: {exc}") from exc
         if result.returncode != 0:
             detail = (result.stderr or "tree-ring command failed").strip().splitlines()[0][:500]
-            raise TreeRingCliError(detail)
+            raise TreeRingCliError(self._redact_capability(detail))
         return result
+
+    def _assert_no_capability_arguments(self, arguments: Iterable[str]) -> None:
+        host_capability = os.environ.get(COORDINATOR_TOKEN_ENV)
+        for argument in arguments:
+            value = str(argument)
+            if CAPABILITY_RE.search(value) or (
+                host_capability and host_capability in value
+            ):
+                raise TreeRingCliError(
+                    "Coordinator capability material is not accepted in Tree Ring command arguments."
+                )
+
+    def _process_environment(self, *, protected: bool) -> dict[str, str]:
+        environment = dict(os.environ)
+        for name in IDENTITY_ENV_VARS:
+            environment.pop(name, None)
+
+        if (
+            protected
+            and self.context.agent_profile
+            and self.context.agent_profile in coordinator_profiles(self.config)
+        ):
+            capability = os.environ.get(COORDINATOR_TOKEN_ENV)
+            if capability and capability.strip():
+                environment[COORDINATOR_TOKEN_ENV] = capability
+        return environment
+
+    def _redact_capability(self, value: str) -> str:
+        redacted = CAPABILITY_RE.sub("[REDACTED]", value)
+        capability = os.environ.get(COORDINATOR_TOKEN_ENV)
+        if capability:
+            redacted = redacted.replace(capability, "[REDACTED]")
+        return redacted
+
+    def _redact_payload(self, value: Any) -> Any:
+        if isinstance(value, str):
+            return self._redact_capability(value)
+        if isinstance(value, list):
+            return [self._redact_payload(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: self._redact_payload(item)
+                for key, item in value.items()
+                if str(key).lower()
+                not in {"capability", "coordinator_token", "tree_ring_coordinator_token"}
+            }
+        return value
 
     def _resolve_binary(self) -> Path:
         configured = str((self.config.get("cli") or {}).get("binary") or "tree-ring")
@@ -457,7 +771,7 @@ class TreeRingCli:
             if resolved.is_file() and os.access(resolved, os.X_OK):
                 return resolved
         raise TreeRingCliError(
-            "tree-ring is not installed for this runtime. Configure cli.binary or place a v0.12.x "
+            "tree-ring is not installed for this runtime. Configure cli.binary or place a v0.13.x "
             "binary in the plugin bin directory."
         )
 
@@ -466,7 +780,8 @@ class TreeRingCli:
         found_tuple = _version_tuple(found)
         if found_tuple[:2] != required_tuple[:2] or found_tuple < required_tuple:
             raise TreeRingCliError(
-                f"Unsupported tree-ring version {found}; this plugin requires {self.required_version} through 0.12.x."
+                f"Unsupported tree-ring version {found}; this plugin requires "
+                f"{self.required_version} through {required_tuple[0]}.{required_tuple[1]}.x."
             )
 
 

@@ -1,8 +1,8 @@
 # Tree Ring Memory for Agent Zero
 
-This plugin is an Agent Zero bridge to the Rust-native Tree Ring Memory CLI. Plugin version 2.1.0 targets the upstream `tree-ring` 0.12 command and JSON contracts; it does not maintain a second Python memory engine.
+This plugin is an Agent Zero bridge to the Rust-native Tree Ring Memory CLI. Plugin version 3.0.0 targets the upstream `tree-ring` 0.13 command and JSON contracts; it does not maintain a second Python memory engine.
 
-The Rust CLI owns validation, sensitivity classification, SQLite/FTS storage, recall ranking, import/export, audit, consolidation, maintenance, DOX/Revolve adapters, and integration discovery. The plugin owns only Agent Zero tools, API envelopes, Web UI shaping, safe host paths, runtime status, and legacy migration.
+The Rust CLI owns validation, sensitivity classification, SQLite/FTS storage, recall ranking, import/export, audit, consolidation, maintenance, DOX/Revolve adapters, coordinated write authorization, and integration discovery. The plugin owns Agent Zero context mapping, tools, API envelopes, Web UI shaping, safe host paths, runtime status, and guarded migration.
 
 ## Install
 
@@ -12,12 +12,12 @@ In Agent Zero, open **Plugins → Install**, choose the Git repository option, a
 https://github.com/TerminallyLazy/tree-ring-memory-agent-zero
 ```
 
-The installer clones this repository into `usr/plugins/tree_ring_memory`, then `hooks.py` automatically validates the packaged CLI, initializes the Rust store, imports a pending Python-v1 store through the validated migration path, and audits the result. Existing memory under `usr/memory/tree_ring_memory` is preserved across updates and uninstall. The community marketplace entry uses the same repository and manifest.
+The installer clones this repository into `usr/plugins/tree_ring_memory`, then `hooks.py` validates the packaged CLI and initializes a new Rust store. Existing memory under `usr/memory/tree_ring_memory` is preserved across updates and uninstall. An existing schema-v1/v2 Rust store is detected before the CLI can open it and waits for the explicit offline schema-v3 workflow below. The community marketplace entry uses the same repository and manifest.
 
 ## Requirements
 
 - Agent Zero with this directory mounted at `/a0/usr/plugins/tree_ring_memory/`.
-- An executable `tree-ring` 0.12.x binary. The plugin requires at least 0.12.0 and fails closed on other minor versions. The published plugin bundles Linux binaries for Agent Zero's `x86_64` and `aarch64` Docker runtimes.
+- An executable `tree-ring` 0.13.x binary. The plugin requires at least 0.13.0 and fails closed on other minor versions. Release builds bundle Linux binaries for Agent Zero's `x86_64` and `aarch64` Docker runtimes.
 - Python 3.12+ in the Agent Zero framework runtime.
 
 Binary discovery order:
@@ -30,7 +30,7 @@ Binary discovery order:
 
 Readiness is visible in the plugin settings and Tree Ring Memory dashboard. There is no manual Execute step.
 
-Both published Linux binaries are built from the exact upstream v0.12.0 tag in matching Rust Linux environments. Building the x86-64 target on Debian Bookworm also avoids the newer GLIBC requirement of the upstream release archive, while upstream v0.12.0 does not publish a Linux ARM64 archive at all. Operators on another platform can use Tree Ring's official installer or build from source, then configure `cli.binary` or place the executable at `usr/plugins/tree_ring_memory/bin/tree-ring`.
+Published Linux binaries are built from the exact upstream v0.13.0 tag in matching Rust Linux environments. Operators on another platform can use Tree Ring's official installer or build from source, then configure `cli.binary` or place the executable at `usr/plugins/tree_ring_memory/bin/tree-ring`.
 
 The install hook selects only the executable already packaged for the running Docker architecture; it does not download or build executable code. Any replacement binary remains an explicit operator action.
 
@@ -56,17 +56,54 @@ The Python-v1 database is preserved as read-only migration input:
 
 Uninstall preserves both stores. Removing the memory root remains a deliberate operator action outside automatic plugin lifecycle handling.
 
+## v0.13 Schema-v3 Upgrade
+
+The plugin never lets a v0.13 CLI auto-open an existing schema-v1/v2 store. The dashboard and settings report `upgrade_required` while normal store operations remain blocked.
+
+Treat the upgrade as an offline, one-way operation:
+
+1. Stop every Tree Ring CLI, plugin, TUI, and worker using the memory root.
+2. In plugin settings, choose **Create verified upgrade backup** and attest that the root is offline.
+3. The helper checkpoints and truncates SQLite WAL, acquires the database lock, verifies `PRAGMA integrity_check`, creates an exact mode-`0600` database backup under `<memory-root>/migrations/`, verifies SHA-256 and record count, and writes a mode-`0600` marker.
+4. Choose **Apply schema v3** while every other process remains stopped. The plugin rechecks the source and backup checksums before allowing `tree-ring init` to migrate.
+5. Upgrade every other CLI, plugin, and bundled worker before reopening the shared root.
+
+If the source changes after backup, application fails closed and requires a fresh backup. Do not run v0.12 against an upgraded root. Schema v3 fences old memory inserts, updates, and deletes, but all mixed-version use—including reads and maintenance—is unsupported. Rollback means stopping every process and restoring the recorded complete backup; it is not a down-migration.
+
 ## Legacy Migration
 
-Migration never edits or deletes the old SQLite database. During install or update, `hooks.py` reads `raw_json`, normalizes Python-v1 null/string and `chat`-scope differences, writes a mode-`0600` temporary JSONL file, validates that file with `tree-ring import --dry-run`, and only then imports it through the Rust CLI. The temporary file is removed after the attempt.
+Legacy Python-v1 migration never edits or deletes the old SQLite database. The migrator reads `raw_json`, normalizes Python-v1 null/string and `chat`-scope differences, writes a mode-`0600` temporary JSONL file, validates that file with `tree-ring import --dry-run`, and only then imports it through the Rust CLI. The temporary file is removed after the attempt.
 
-Migration is idempotent. A marker under `<memory-root>/migrations/` prevents accidental repeats, while the Rust importer skips duplicate IDs by default. The original legacy database remains available as read-only recovery input.
+Migration is idempotent. A marker under `<memory-root>/migrations/` prevents accidental repeats, while the Rust importer skips duplicate IDs by default. The original legacy database remains available as read-only recovery input. Automatic durable import occurs only while the Rust store policy is `open`; in `coordinated` mode the bridge performs only the dry-run preview until an authorized coordinator profile explicitly confirms migration.
+
+## Multi-Agent and Coordinator Mapping
+
+Every Agent Zero tool invocation derives its Tree Ring identity from the live server-side Agent Zero context:
+
+- `agent_profile` comes from the active Agent Zero profile, with the Agent Zero name as a fallback.
+- `project` comes from the active Agent Zero project.
+- `session_id` is the current chat or worker context.
+- `workflow_id` is the parent context for parallel fan-out workers and otherwise the current context.
+- `operation_id` and `source_ref` are explicit tool inputs and are forwarded unchanged so a retry can reuse the same logical write identity and provenance.
+
+The caller cannot set write identity through API payload fields. Recall can intentionally request a wider fan-in view with `include_all_agents=true`; that omits the agent/session filter while retaining the shared workflow filter.
+
+Every subprocess starts from a copy of the host environment with `TREE_RING_COORDINATOR_TOKEN` and all Tree Ring identity environment variables removed. A coordinator capability is reinserted only when both conditions hold:
+
+1. the operation is a protected mutation; and
+2. the server-derived Agent Zero profile appears in `coordination.coordinator_profiles`.
+
+The capability remains host-environment-only. It is not accepted by tools or API payloads, stored in plugin configuration, logged, returned, or rendered in the Web UI. Policy enable/rotate/disable and the one-time capability stay operator-only CLI actions. The plugin exposes only read-only `policy_status` and `policy_audit`.
+
+Ordinary memories default to `scope=agent`, carry the derived identity, and do not receive the capability. In coordinated mode, shared/global/project/workflow writes, heartwood creation, evidence publication, persisted consolidation or adapter sync, imports, replacements, ring changes, delete/redact, and applied maintenance require coordinator authorization.
+
+This is operational write authorization for cooperative official processes sharing one local SQLite store on one host. It is not a read ACL, an operating-system boundary, distributed coordination, or a cross-host/network-filesystem guarantee.
 
 ## Agent Tools
 
-- `remember`: concise memory through the upstream `remember` surface.
+- `remember`: concise agent-scoped memory with server-derived identity plus optional `operation_id` and `source_ref`.
 - `evidence`: evaluated outcomes with a required evidence reference.
-- `recall`: Rust-ranked recall with optional Agent Zero ring/event post-filters.
+- `recall`: Rust-ranked recall with native project/agent/workflow/session/scope filters and optional Agent Zero ring/event post-filters.
 - `forget`: explicit-ID delete or redact.
 - `consolidate`: daily, weekly, monthly, yearly, or manual consolidation.
 - `audit_memory`: non-mutating quality, privacy, and integrity audit.
@@ -75,20 +112,22 @@ Migration is idempotent. A marker under `<memory-root>/migrations/` prevents acc
 - `sync_revolve`: Revolve evidence adapter; dry-run by default.
 - `import_memory`: dry-run by default, with optional duplicate replacement.
 - `export_memory`: canonical JSONL export.
+- `policy_status`: read-only coordinated-policy status.
+- `policy_audit`: read-only protected-write authorization decisions.
 
-The v0.12 CLI does not expose query-wide forget, selected-memory export, Markdown/SQLite export, expiry, or supersession as scriptable commands. The plugin returns an explicit unsupported-operation error for those former Python-v1 surfaces.
+The v0.13 CLI does not expose query-wide forget, selected-memory export, Markdown/SQLite export, expiry, or supersession as scriptable commands. The plugin returns an explicit unsupported-operation error for those former Python-v1 surfaces.
 
 ## Web UI
 
 ![Tree Ring Memory dashboard](screenshots/tree-ring-memory-dashboard.png)
 
-The panel provides runtime readiness, search, ring/event filters, memory detail, ring-derived copies, delete/redact, consolidation, safe DOX/Revolve previews, audit, and canonical JSONL export. Its concentric Tree Ring visual illuminates each ring relative to the busiest ring, while the adjacent ledger shows exact record counts and share of the store; selecting a ring filters the live results. The settings view contains only values the bridge actually consumes: binary/version/timeout, storage paths, and recall limits.
+The panel provides runtime/schema readiness, write-policy status, search, ring/event filters, memory detail, ring-derived copies, delete/redact, consolidation, safe DOX/Revolve previews, memory and policy audit, and canonical JSONL export. Its concentric Tree Ring visual illuminates each ring relative to the busiest ring, while the adjacent ledger shows exact record counts and share of the store; selecting a ring filters the live results. The settings view also owns the explicit two-step schema upgrade and the non-secret coordinator-profile allowlist.
 
 When the CLI is missing or incompatible, the panel stays available and shows the concrete readiness error instead of initializing a second store.
 
 ## Lifecycle and Maintenance
 
-`hooks.py` owns automatic setup. Its install hook is idempotent, and Agent Zero runs it after both fresh installs and updates. The configuration hook provides a second idempotent bootstrap path after an update so older installations cannot remain dependent on the removed `execute.py` script. Before an update, the hook exports the initialized canonical store as a recovery snapshot.
+`hooks.py` owns automatic setup. Its install hook is idempotent, and Agent Zero runs it after both fresh installs and updates. The configuration hook provides a second idempotent bootstrap path after an update so older installations cannot remain dependent on the removed `execute.py` script. A schema-v1/v2 preflight returns without opening the database. Before later updates, the hook exports an initialized compatible store as a recovery snapshot.
 
 Interactive audit, consolidation, FTS repair, DOX/Revolve previews, import preview, and export remain available through the Web UI and Agent Zero tools. Sensitive recall and export remain opt-in. DOX `AGENTS.md`, Revolve evidence, current source, tests, and explicit user instructions remain authoritative over recalled memory.
 

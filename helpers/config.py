@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-SUPPORTED_TREE_RING_VERSION = "0.12.0"
+SUPPORTED_TREE_RING_VERSION = "0.13.0"
 DEFAULT_MEMORY_ROOT = "/a0/usr/memory/tree_ring_memory"
 LOCAL_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.json"
 
@@ -26,6 +26,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "default_project_scope": "current_project",
         "allow_global": True,
         "allow_cross_project_recall": False,
+    },
+    "coordination": {
+        "coordinator_profiles": [],
     },
     "recall": {
         "max_results_default": 8,
@@ -102,6 +105,16 @@ def load_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
     recall["bridge_scan_limit"] = _bounded_int(
         recall.get("bridge_scan_limit"), default=100, minimum=8, maximum=1000
     )
+
+    coordination = loaded.setdefault("coordination", {})
+    profiles = coordination.get("coordinator_profiles")
+    if isinstance(profiles, str):
+        profiles = [profiles]
+    coordination["coordinator_profiles"] = [
+        str(profile).strip()
+        for profile in (profiles if isinstance(profiles, list) else [])
+        if str(profile).strip()
+    ]
 
     if os.environ.get("TREE_RING_MEMORY_PROJECT_ROOT"):
         loaded.setdefault("scope", {})["allowed_project_root"] = os.environ[

@@ -8,11 +8,11 @@
 <body>
     <div x-data>
         <template x-if="$store.treeRingMemory && config">
-            <div class="trm-settings" x-init="$store.treeRingMemory.ensureSettingsUi(); $store.treeRingMemory.refreshStatus()">
+            <div class="trm-settings" x-init="$store.treeRingMemory.ensureSettingsUi(); $store.treeRingMemory.refreshStatus().then(() => { if ($store.treeRingMemory.status.ok) $store.treeRingMemory.refreshPolicy(); })">
                 <header class="trm-settings-hero">
                     <div>
                         <div class="section-title">Tree Ring Memory</div>
-                        <div class="section-description">Configure the Agent Zero bridge to the Rust-native v0.12 CLI.</div>
+                        <div class="section-description">Configure the Agent Zero bridge to the Rust-native v0.13 CLI.</div>
                     </div>
                     <button type="button" class="btn btn-field" @click="openModal('/plugins/tree_ring_memory/webui/main.html')">
                         <span class="material-symbols-outlined">account_tree</span>
@@ -35,7 +35,7 @@
                         <span class="material-symbols-outlined">terminal</span>
                         <div>
                             <strong>Runtime</strong>
-                            <span>These values control the executable boundary. The bridge accepts 0.12.x and fails closed on incompatible versions.</span>
+                            <span>These values control the executable boundary. The bridge accepts 0.13.x and fails closed on incompatible versions.</span>
                         </div>
                     </div>
 
@@ -93,6 +93,12 @@
                     </label>
 
                     <div class="trm-action-row">
+                        <button type="button" class="btn btn-field" x-show="$store.treeRingMemory.status.upgrade_required && !$store.treeRingMemory.status.upgrade_prepared" @click="$store.treeRingMemory.schemaUpgrade('prepare')">
+                            Create verified upgrade backup
+                        </button>
+                        <button type="button" class="btn btn-field" x-show="$store.treeRingMemory.status.upgrade_required && $store.treeRingMemory.status.upgrade_prepared" @click="$store.treeRingMemory.schemaUpgrade('apply')">
+                            Apply schema v3
+                        </button>
                         <button type="button" class="btn btn-field" @click="$store.treeRingMemory.developerAction('migrate')">
                             Validate migration
                         </button>
@@ -103,7 +109,41 @@
                             Export diagnostics
                         </button>
                     </div>
-                    <p class="trm-footnote">Validation is dry-run only. Install and update hooks automatically perform the one-time durable import after validation while preserving the legacy database.</p>
+                    <p class="trm-footnote">A schema-v2 store is never auto-opened. Stop every Tree Ring process first; the backup helper checkpoints WAL, creates a mode-0600 byte-for-byte backup, verifies its checksum and SQLite integrity, and requires a second explicit action before migration. Legacy Python-v1 validation remains dry-run; durable import is automatic only while the write policy is open.</p>
+                </section>
+
+                <section class="trm-settings-card">
+                    <div class="trm-card-heading">
+                        <span class="material-symbols-outlined">hub</span>
+                        <div>
+                            <strong>Multi-agent write policy</strong>
+                            <span>Policy status and audit are read-only. Enable, rotate, disable, and the one-time coordinator capability remain operator-only CLI actions and are never exposed here.</span>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="field-label">
+                            <div class="field-title">Current policy</div>
+                            <div class="field-description">Coordinated mode protects shared publication, promotion, replacement, and destructive maintenance. It is not a read ACL.</div>
+                        </div>
+                        <div class="field-control">
+                            <span x-text="$store.treeRingMemory.policyLabel()"></span>
+                        </div>
+                    </div>
+                    <label class="trm-path-field">
+                        <span>Authorized coordinator profiles (comma separated)</span>
+                        <input
+                            type="text"
+                            :value="Array.isArray(config.coordination.coordinator_profiles) ? config.coordination.coordinator_profiles.join(', ') : (config.coordination.coordinator_profiles || '')"
+                            @change="config.coordination.coordinator_profiles = $event.target.value.split(',').map(value => value.trim()).filter(Boolean)"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                    </label>
+                    <div class="trm-action-row">
+                        <button type="button" class="btn btn-field" @click="$store.treeRingMemory.refreshPolicy()">Refresh policy</button>
+                        <button type="button" class="btn btn-field" @click="$store.treeRingMemory.refreshPolicyAudit()">Load policy audit</button>
+                    </div>
+                    <p class="trm-footnote">Only a protected mutation originating from a profile listed here can receive the coordinator capability from the Agent Zero host environment. Ordinary subprocesses and ordinary agent-scoped writes always run with coordinator and identity environment variables removed.</p>
                 </section>
 
                 <section class="trm-settings-card">

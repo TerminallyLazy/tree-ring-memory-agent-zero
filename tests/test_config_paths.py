@@ -24,7 +24,7 @@ def test_load_config_reads_plugin_local_runtime_settings(tmp_path, monkeypatch):
 
     assert config["cli"]["binary"] == "/opt/tree-ring"
     assert config["storage"]["root"] == "/tmp/tree-ring-root"
-    assert config["cli"]["required_version"] == "0.12.0"
+    assert config["cli"]["required_version"] == "0.13.0"
 
 
 def test_legacy_storage_keys_map_to_rust_root(tmp_path):

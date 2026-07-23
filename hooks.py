@@ -16,12 +16,23 @@ _BOOTSTRAPPED_ROOTS: set[Path] = set()
 
 
 def bootstrap_runtime(config: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Initialize, migrate, and audit the Rust-owned store idempotently."""
+    """Prepare a compatible store without crossing the offline upgrade gate."""
 
     resolved = load_config(config)
     paths.ensure_memory_dirs(resolved)
     bridge = TreeRingCli(resolved)
     initial_status = bridge.status()
+    if initial_status.get("upgrade_required"):
+        return {
+            "ok": True,
+            "ready": False,
+            "upgrade_required": True,
+            "status": initial_status,
+            "message": (
+                "The existing Tree Ring store was not opened. Stop every Tree Ring process, "
+                "create the verified pre-v0.13 backup, and explicitly apply schema v3."
+            ),
+        }
     if not initial_status.get("ok"):
         detail = str(initial_status.get("error") or "tree-ring runtime is unavailable")
         raise RuntimeError(f"Tree Ring Memory automatic setup failed: {detail}")
@@ -30,7 +41,10 @@ def bootstrap_runtime(config: dict[str, Any] | None = None) -> dict[str, Any]:
     init_result = bridge.init() if initialized_now else None
     migration = None
     if initial_status.get("legacy_migration_pending"):
-        migration = LegacyMigrator(resolved, cli=bridge).migrate(confirm=True)
+        policy = bridge.policy_status()
+        migration = LegacyMigrator(resolved, cli=bridge).migrate(
+            confirm=str(policy.get("mode") or "").lower() == "open"
+        )
 
     audit = bridge.audit("all")
     final_status = bridge.status()
@@ -40,6 +54,7 @@ def bootstrap_runtime(config: dict[str, Any] | None = None) -> dict[str, Any]:
 
     return {
         "ok": True,
+        "ready": True,
         "initialized_now": initialized_now,
         "init": init_result,
         "migration": migration,

@@ -26,8 +26,9 @@
                 <section class="trm-runtime-notice" :class="{ 'is-ready': $store.treeRingMemory.status.ok }">
                     <span class="material-symbols-outlined" x-text="$store.treeRingMemory.status.ok ? 'verified' : 'warning'"></span>
                     <div>
-                        <strong x-text="$store.treeRingMemory.status.ok ? `tree-ring ${$store.treeRingMemory.status.version}` : 'Tree Ring CLI unavailable'"></strong>
-                        <span x-text="$store.treeRingMemory.status.ok ? ($store.treeRingMemory.status.legacy_migration_pending ? 'Legacy Python memory is preserved and awaits explicit migration.' : 'Rust-owned storage is ready.') : ($store.treeRingMemory.status.error || 'Configure a compatible v0.12.x binary in plugin settings.')"></span>
+                        <strong x-text="$store.treeRingMemory.status.ok ? `tree-ring ${$store.treeRingMemory.status.version}` : ($store.treeRingMemory.status.upgrade_required ? 'Offline schema upgrade required' : 'Tree Ring CLI unavailable')"></strong>
+                        <span x-text="$store.treeRingMemory.status.ok ? ($store.treeRingMemory.status.legacy_migration_pending ? 'Legacy Python memory is preserved and awaits explicit migration.' : `Rust-owned schema v${$store.treeRingMemory.status.schema_version} storage is ready.`) : ($store.treeRingMemory.status.error || 'Configure a compatible v0.13.x binary in plugin settings.')"></span>
+                        <span x-show="$store.treeRingMemory.status.ok" x-text="`Write policy: ${$store.treeRingMemory.policyLabel()}. This is not a read ACL.`"></span>
                     </div>
                 </section>
 
@@ -266,6 +267,7 @@
                             <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('sync_dox')" :disabled="$store.treeRingMemory.maintenanceBusy">Preview DOX</button>
                             <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('sync_revolve')" :disabled="$store.treeRingMemory.maintenanceBusy">Preview Revolve</button>
                             <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('audit')" :disabled="$store.treeRingMemory.maintenanceBusy">Audit</button>
+                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.refreshPolicyAudit()" :disabled="$store.treeRingMemory.maintenanceBusy">Policy audit</button>
                             <button type="button" class="trm-primary-action is-compact" @click="$store.treeRingMemory.maintenance('export')" :disabled="$store.treeRingMemory.maintenanceBusy">Export</button>
                         </div>
                     </div>

@@ -1,0 +1,95 @@
+name: Build bundled Tree Ring binaries
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/build-bundled-binaries.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            runner: ubuntu-24.04
+            machine: x86_64
+          - target: linux-aarch64
+            runner: ubuntu-24.04-arm
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
+    container: rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1
+    steps:
+      - name: Install verification tools
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends binutils file
+
+      - name: Check out exact upstream release tag
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: TerminallyLazy/Tree-Ring-Memory
+          ref: v0.13.0
+          fetch-depth: 0
+          path: upstream
+
+      - name: Verify immutable source identity
+        working-directory: upstream
+        run: |
+          test "$(git rev-parse HEAD)" = "167bc655e001112ff5593d7af0984b3e8689ea1a"
+          test "$(git rev-list -n 1 v0.13.0)" = "167bc655e001112ff5593d7af0984b3e8689ea1a"
+          test "$(uname -m)" = "${{ matrix.machine }}"
+
+      - name: Build and test on the native Linux architecture
+        working-directory: upstream
+        run: |
+          cargo test --locked -p tree-ring-memory-cli --test multi_agent_acceptance
+          cargo build --release --locked -p tree-ring-memory-cli
+          test "$(target/release/tree-ring --version)" = "tree-ring 0.13.0"
+
+      - name: Verify Bookworm runtime boundary and stage artifact
+        working-directory: upstream
+        run: |
+          file target/release/tree-ring
+          maximum_glibc="$(
+            objdump -T target/release/tree-ring |
+              grep -o 'GLIBC_[0-9]\+\.[0-9]\+' |
+              sort -Vu |
+              tail -n 1
+          )"
+          test -n "$maximum_glibc"
+          dpkg --compare-versions "${maximum_glibc#GLIBC_}" le "2.36"
+          mkdir -p "bundle/${{ matrix.target }}"
+          install -m 0755 target/release/tree-ring "bundle/${{ matrix.target }}/tree-ring"
+          (
+            cd "bundle/${{ matrix.target }}"
+            sha256sum tree-ring > SHA256SUM
+            sha256sum -c SHA256SUM
+          )
+          {
+            echo "source_repository=https://github.com/TerminallyLazy/Tree-Ring-Memory"
+            echo "source_tag=v0.13.0"
+            echo "source_commit=167bc655e001112ff5593d7af0984b3e8689ea1a"
+            echo "build_image=rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1"
+            echo "runner=${{ matrix.runner }}"
+            echo "machine=$(uname -m)"
+            echo "rustc=$(rustc --version)"
+            echo "cargo=$(cargo --version)"
+            echo "glibc=$(ldd --version | head -n 1)"
+            echo "maximum_required_glibc=$maximum_glibc"
+            echo "binary_version=$(target/release/tree-ring --version)"
+          } > "bundle/${{ matrix.target }}/PROVENANCE.txt"
+
+      - name: Upload verified native binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tree-ring-v0.13.0-${{ matrix.target }}
+          path: upstream/bundle/${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 14

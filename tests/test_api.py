@@ -10,7 +10,7 @@ class FakeBridge:
         self.calls: list[tuple[str, dict]] = []
 
     def status(self):
-        return {"ok": False, "required_version": "0.12.0", "error": "missing cli"}
+        return {"ok": False, "required_version": "0.13.0", "error": "missing cli"}
 
     def recall(self, query, **kwargs):
         self.calls.append(("recall", {"query": query, **kwargs}))
@@ -27,8 +27,12 @@ class FakeBridge:
 
 def handler_with_fake(monkeypatch):
     fake = FakeBridge()
-    monkeypatch.setattr(memory_api, "TreeRingCli", lambda config: fake)
-    return memory_api.MemoryApi.__new__(memory_api.MemoryApi), fake
+    handler = memory_api.MemoryApi.__new__(memory_api.MemoryApi)
+    handler._bridge = lambda input, require_context: (  # type: ignore[method-assign]
+        fake,
+        {"recall": {"max_results_default": 8}},
+    )
+    return handler, fake
 
 
 def test_status_preserves_readiness_details_when_cli_is_missing(monkeypatch):
@@ -37,7 +41,7 @@ def test_status_preserves_readiness_details_when_cli_is_missing(monkeypatch):
     result = asyncio.run(handler.process({"action": "status"}, None))
 
     assert result["ok"] is False
-    assert result["data"]["required_version"] == "0.12.0"
+    assert result["data"]["required_version"] == "0.13.0"
     assert result["error"] == "missing cli"
 
 
@@ -67,3 +71,46 @@ def test_dox_sync_defaults_to_safe_dry_run(monkeypatch):
 
 def test_envelope_does_not_replace_empty_lists_with_objects():
     assert memory_api.envelope([])["data"] == []
+
+
+def test_api_rejects_coordinator_capability_fields_before_dispatch(monkeypatch):
+    handler, fake = handler_with_fake(monkeypatch)
+
+    result = asyncio.run(
+        handler.process(
+            {
+                "action": "remember",
+                "context_id": "chat-1",
+                "coordinator_token": "must-not-be-accepted",
+            },
+            None,
+        )
+    )
+
+    assert result["ok"] is False
+    assert "never accepted" in result["error"]
+    assert fake.calls == []
+
+
+def test_api_rejects_nested_capability_field_before_dispatch(monkeypatch):
+    handler, fake = handler_with_fake(monkeypatch)
+
+    result = asyncio.run(
+        handler.process(
+            {
+                "action": "remember",
+                "context_id": "chat-1",
+                "memory": {
+                    "summary": "must not dispatch",
+                    "metadata": {
+                        "coordinator-capability": "must-not-be-accepted"
+                    },
+                },
+            },
+            None,
+        )
+    )
+
+    assert result["ok"] is False
+    assert "never accepted" in result["error"]
+    assert fake.calls == []

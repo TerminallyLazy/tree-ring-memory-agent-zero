@@ -1,7 +1,7 @@
 name: tree_ring_memory
 title: Tree Ring Memory
-description: Agent Zero bridge to the Rust-native Tree Ring Memory v0.12 CLI.
-version: 2.1.0
+description: Agent Zero bridge to the Rust-native Tree Ring Memory v0.13 CLI.
+version: 3.0.0
 settings_sections:
   - agent
   - developer

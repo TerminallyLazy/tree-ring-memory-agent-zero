@@ -3,8 +3,16 @@ import { callJsonApi } from "/js/api.js";
 
 const apiPath = "/plugins/tree_ring_memory/memory_api";
 
+function currentContextId() {
+    return typeof globalThis.getContext === "function" ? String(globalThis.getContext() || "") : "";
+}
+
 async function post(action, payload = {}) {
-    const data = await callJsonApi(apiPath, { action, ...payload });
+    const data = await callJsonApi(apiPath, {
+        action,
+        context_id: currentContextId(),
+        ...payload,
+    });
     if (!data.ok) {
         throw new Error(data.error || "Tree Ring Memory request failed");
     }
@@ -24,7 +32,9 @@ export const store = createStore("treeRingMemory", {
     results: [],
     selected: null,
     stats: { counts: {} },
-    status: { ok: false, required_version: "0.12.0" },
+    status: { ok: false, required_version: "0.13.0" },
+    policy: { mode: "unknown", coordinator_label: null },
+    policyAudit: [],
     searchBusy: false,
     maintenanceBusy: false,
     exportPath: "",
@@ -160,13 +170,15 @@ export const store = createStore("treeRingMemory", {
 
     async init() {
         await this.refreshStatus();
-        if (this.status.ok) await this.refreshStats();
+        if (this.status.ok) {
+            await Promise.all([this.refreshStats(), this.refreshPolicy()]);
+        }
     },
 
     async onOpen() {
         await this.refreshStatus();
         if (!this.status.ok) return;
-        await this.refreshStats();
+        await Promise.all([this.refreshStats(), this.refreshPolicy()]);
         if (!this.results.length) {
             await this.search();
         }
@@ -208,16 +220,37 @@ export const store = createStore("treeRingMemory", {
 
     async refreshStatus() {
         try {
-            const response = await callJsonApi(apiPath, { action: "status" });
+            const response = await callJsonApi(apiPath, {
+                action: "status",
+                context_id: currentContextId(),
+            });
             this.status = response.data || { ok: false, error: response.error || "Tree Ring CLI unavailable" };
         } catch (error) {
             this.status = { ok: false, error: error.message };
         }
     },
 
+    async refreshPolicy() {
+        try {
+            const response = await post("policy_status");
+            this.policy = response.data || { mode: "unknown", coordinator_label: null };
+        } catch (error) {
+            this.policy = { mode: "unavailable", coordinator_label: null };
+            notify(error.message, "error");
+        }
+    },
+
+    policyLabel() {
+        const mode = String(this.policy?.mode || "unknown");
+        const coordinator = this.policy?.coordinator_label;
+        return coordinator ? `${mode} · ${coordinator}` : mode;
+    },
+
     async remember(summary) {
         try {
-            await post("remember", { memory: { summary, event_type: "lesson" } });
+            await post("remember", {
+                memory: { summary, event_type: "lesson", scope: "agent" },
+            });
             notify("Memory stored.", "success");
             await this.search();
             await this.refreshStats();
@@ -275,6 +308,36 @@ export const store = createStore("treeRingMemory", {
             const response = await post(action, action === "migrate" ? { confirm: false } : {});
             this.exportPath = response.data.path || response.data.export?.path || response.data.message || "";
             notify(action.replace("_", " ") + " complete.", "success");
+        } catch (error) {
+            notify(error.message, "error");
+        }
+    },
+
+    async schemaUpgrade(stage) {
+        const action = stage === "apply" ? "apply_schema_upgrade" : "prepare_schema_upgrade";
+        const message = stage === "apply"
+            ? "Apply schema v3 now? The verified backup must already exist and every Tree Ring process must still be stopped."
+            : "Create the pre-v0.13 backup now? Confirm every Tree Ring CLI, plugin, TUI, and worker using this root is stopped.";
+        if (!window.confirm(message)) return;
+        try {
+            const response = await post(action, { confirm_offline: true });
+            this.exportPath = response.data.backup_path || response.data.message || "";
+            notify(response.data.message || "Schema upgrade step complete.", "success");
+            await this.refreshStatus();
+            if (this.status.ok) {
+                await Promise.all([this.refreshStats(), this.refreshPolicy()]);
+            }
+        } catch (error) {
+            notify(error.message, "error");
+        }
+    },
+
+    async refreshPolicyAudit() {
+        try {
+            const response = await post("policy_audit", { limit: 50 });
+            this.policyAudit = Array.isArray(response.data) ? response.data : [];
+            this.exportPath = `${this.policyAudit.length} protected-write decisions loaded.`;
+            notify("Policy audit loaded.", "success");
         } catch (error) {
             notify(error.message, "error");
         }

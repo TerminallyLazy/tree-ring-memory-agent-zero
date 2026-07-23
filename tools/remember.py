@@ -15,15 +15,17 @@ class Remember(Tool):
         summary: str = "",
         event_type: str = "lesson",
         ring: str = "cambium",
-        scope: str = "global",
+        scope: str = "agent",
         project: str = "",
+        operation_id: str = "",
+        source_ref: str = "",
         tags: list[str] | None = None,
         **kwargs,
     ):
         unsupported = [key for key, value in kwargs.items() if value not in (None, "", [], {})]
         if unsupported:
             return tool_error(
-                "tree-ring 0.12 remember does not accept: "
+                "tree-ring 0.13 remember does not accept: "
                 + ", ".join(sorted(unsupported))
                 + ". Use the evidence tool for evaluated details."
             )
@@ -33,8 +35,10 @@ class Remember(Tool):
                 summary,
                 event_type=event_type or "lesson",
                 ring=ring or "cambium",
-                scope=scope or ("project" if project else "global"),
+                scope=scope or "agent",
                 project=project or None,
+                operation_id=operation_id or None,
+                source_ref=source_ref or None,
                 tags=tags or [],
             )
             return tool_success(event, "Memory stored through tree-ring.")

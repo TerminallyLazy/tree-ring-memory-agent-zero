@@ -284,13 +284,13 @@ class TreeRingCli:
         )
         effective_project = project or self.context.project
         effective_agent = (
-            None
+            agent_profile
             if include_all_agents
             else (agent_profile or self.context.agent_profile)
         )
         effective_workflow = workflow_id or self.context.workflow_id
         effective_session = (
-            None
+            session_id
             if include_all_agents
             else (session_id or self.context.session_id)
         )

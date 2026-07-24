@@ -32,6 +32,23 @@
                     </div>
                 </section>
 
+                <section class="trm-writer-context" :class="{ 'is-ready': $store.treeRingMemory.hasWriterContext() }">
+                    <span class="material-symbols-outlined">badge</span>
+                    <div>
+                        <strong>Writer context</strong>
+                        <span x-text="$store.treeRingMemory.writerContextSummary()"></span>
+                    </div>
+                    <select
+                        x-model="$store.treeRingMemory.writerContextId"
+                        aria-label="Tree Ring writer context"
+                    >
+                        <option value="" disabled>No chat context available</option>
+                        <template x-for="writerContext in $store.treeRingMemory.writerContexts()" :key="writerContext.id">
+                            <option :value="writerContext.id" x-text="$store.treeRingMemory.writerContextLabel(writerContext)"></option>
+                        </template>
+                    </select>
+                </section>
+
                 <section class="trm-ring-observatory" aria-label="Memory ring usage">
                     <div class="trm-ring-visual">
                         <div class="trm-ring-map">
@@ -221,26 +238,26 @@
                                 </div>
 
                                 <div class="trm-action-group">
-                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.mark('heartwood')">
+                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.mark('heartwood')" :disabled="!$store.treeRingMemory.hasWriterContext()">
                                         <span class="material-symbols-outlined">verified</span>
                                         <span>Heartwood</span>
                                     </button>
-                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.mark('scar')">
+                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.mark('scar')" :disabled="!$store.treeRingMemory.hasWriterContext()">
                                         <span class="material-symbols-outlined">report</span>
                                         <span>Scar</span>
                                     </button>
-                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.mark('seed')">
+                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.mark('seed')" :disabled="!$store.treeRingMemory.hasWriterContext()">
                                         <span class="material-symbols-outlined">psychiatry</span>
                                         <span>Seed</span>
                                     </button>
                                 </div>
 
                                 <div class="trm-danger-row">
-                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.forgetSelected('redact')">
+                                    <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.forgetSelected('redact')" :disabled="!$store.treeRingMemory.hasWriterContext()">
                                         <span class="material-symbols-outlined">ink_eraser</span>
                                         <span>Redact</span>
                                     </button>
-                                    <button type="button" class="trm-danger-action" @click="$store.treeRingMemory.forgetSelected('delete')">
+                                    <button type="button" class="trm-danger-action" @click="$store.treeRingMemory.forgetSelected('delete')" :disabled="!$store.treeRingMemory.hasWriterContext()">
                                         <span class="material-symbols-outlined">delete</span>
                                         <span>Forget</span>
                                     </button>
@@ -263,9 +280,9 @@
                             <span>Maintenance</span>
                         </div>
                         <div class="trm-maintenance-actions">
-                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('consolidate')" :disabled="$store.treeRingMemory.maintenanceBusy">Consolidate</button>
-                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('sync_dox')" :disabled="$store.treeRingMemory.maintenanceBusy">Preview DOX</button>
-                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('sync_revolve')" :disabled="$store.treeRingMemory.maintenanceBusy">Preview Revolve</button>
+                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('consolidate')" :disabled="$store.treeRingMemory.maintenanceBusy || !$store.treeRingMemory.hasWriterContext()">Consolidate</button>
+                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('sync_dox')" :disabled="$store.treeRingMemory.maintenanceBusy || !$store.treeRingMemory.hasWriterContext()">Preview DOX</button>
+                            <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('sync_revolve')" :disabled="$store.treeRingMemory.maintenanceBusy || !$store.treeRingMemory.hasWriterContext()">Preview Revolve</button>
                             <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.maintenance('audit')" :disabled="$store.treeRingMemory.maintenanceBusy">Audit</button>
                             <button type="button" class="trm-quiet-action" @click="$store.treeRingMemory.refreshPolicyAudit()" :disabled="$store.treeRingMemory.maintenanceBusy">Policy audit</button>
                             <button type="button" class="trm-primary-action is-compact" @click="$store.treeRingMemory.maintenance('export')" :disabled="$store.treeRingMemory.maintenanceBusy">Export</button>
@@ -352,6 +369,40 @@
         .trm-runtime-notice span:last-child {
             color: var(--color-text-secondary);
             font-size: 12px;
+        }
+
+        .trm-writer-context {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) minmax(180px, 280px);
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border: 1px solid color-mix(in srgb, var(--trm-ring-scar) 52%, var(--color-border));
+            border-radius: 8px;
+            background: color-mix(in srgb, var(--trm-ring-scar) 7%, var(--trm-surface));
+        }
+
+        .trm-writer-context.is-ready {
+            border-color: color-mix(in srgb, var(--trm-ring-cambium) 46%, var(--color-border));
+            background: color-mix(in srgb, var(--trm-ring-cambium) 7%, var(--trm-surface));
+        }
+
+        .trm-writer-context > div {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .trm-writer-context span:last-child {
+            color: var(--color-text-muted);
+            font-size: 12px;
+            overflow-wrap: anywhere;
+        }
+
+        .trm-writer-context select {
+            width: 100%;
+            min-width: 0;
         }
 
         .trm-title-block .section-title {
@@ -1093,6 +1144,14 @@
         @media (max-width: 840px) {
             .trm-panel-header {
                 grid-template-columns: 48px minmax(0, 1fr);
+            }
+
+            .trm-writer-context {
+                grid-template-columns: auto minmax(0, 1fr);
+            }
+
+            .trm-writer-context select {
+                grid-column: 1 / -1;
             }
 
             .trm-panel-stat {

@@ -7,8 +7,8 @@
 </head>
 <body>
     <div x-data>
-        <template x-if="$store.treeRingMemory && config">
-            <div class="trm-settings" x-init="$store.treeRingMemory.ensureSettingsUi(); $store.treeRingMemory.refreshStatus().then(() => { if ($store.treeRingMemory.status.ok) $store.treeRingMemory.refreshPolicy(); })">
+        <template x-if="$store.treeRingMemory && config && $store.treeRingMemory.hydrateSettingsConfig(config)">
+            <div class="trm-settings" x-init="$store.treeRingMemory.ensureSettingsUi(); $store.treeRingMemory.syncWriterContext(); $store.treeRingMemory.refreshStatus().then(() => { if ($store.treeRingMemory.status.ok) $store.treeRingMemory.refreshPolicy(); })">
                 <header class="trm-settings-hero">
                     <div>
                         <div class="section-title">Tree Ring Memory</div>
@@ -102,7 +102,7 @@
                         <button type="button" class="btn btn-field" @click="$store.treeRingMemory.developerAction('migrate')">
                             Validate migration
                         </button>
-                        <button type="button" class="btn btn-field" @click="$store.treeRingMemory.developerAction('rebuild_fts')">
+                        <button type="button" class="btn btn-field" @click="$store.treeRingMemory.developerAction('rebuild_fts')" :disabled="!$store.treeRingMemory.hasWriterContext()">
                             Repair FTS
                         </button>
                         <button type="button" class="btn btn-field" @click="$store.treeRingMemory.developerAction('export_diagnostics')">
@@ -133,12 +133,25 @@
                         <span>Authorized coordinator profiles (comma separated)</span>
                         <input
                             type="text"
-                            :value="Array.isArray(config.coordination.coordinator_profiles) ? config.coordination.coordinator_profiles.join(', ') : (config.coordination.coordinator_profiles || '')"
-                            @change="config.coordination.coordinator_profiles = $event.target.value.split(',').map(value => value.trim()).filter(Boolean)"
+                            :value="Array.isArray(config.coordination?.coordinator_profiles) ? config.coordination.coordinator_profiles.join(', ') : (config.coordination?.coordinator_profiles || '')"
+                            @change="(config.coordination ??= {}).coordinator_profiles = $event.target.value.split(',').map(value => value.trim()).filter(Boolean)"
                             autocomplete="off"
                             spellcheck="false"
                         />
                     </label>
+                    <label class="trm-path-field">
+                        <span>Writer context for protected actions</span>
+                        <select
+                            x-model="$store.treeRingMemory.writerContextId"
+                            aria-label="Tree Ring writer context"
+                        >
+                            <option value="" disabled>No chat context available</option>
+                            <template x-for="writerContext in $store.treeRingMemory.writerContexts()" :key="writerContext.id">
+                                <option :value="writerContext.id" x-text="$store.treeRingMemory.writerContextLabel(writerContext)"></option>
+                            </template>
+                        </select>
+                    </label>
+                    <p class="trm-footnote" x-text="$store.treeRingMemory.writerContextSummary()"></p>
                     <div class="trm-action-row">
                         <button type="button" class="btn btn-field" @click="$store.treeRingMemory.refreshPolicy()">Refresh policy</button>
                         <button type="button" class="btn btn-field" @click="$store.treeRingMemory.refreshPolicyAudit()">Load policy audit</button>
@@ -250,6 +263,7 @@
 
         .trm-wide-control input,
         .trm-path-field input,
+        .trm-path-field select,
         .trm-number-grid input {
             width: 100%;
             min-width: 0;

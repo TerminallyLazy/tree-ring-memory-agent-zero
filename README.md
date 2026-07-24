@@ -1,6 +1,6 @@
 # Tree Ring Memory for Agent Zero
 
-This plugin is an Agent Zero bridge to the Rust-native Tree Ring Memory CLI. Plugin version 3.0.0 targets the upstream `tree-ring` 0.13 command and JSON contracts; it does not maintain a second Python memory engine.
+This plugin is an Agent Zero bridge to the Rust-native Tree Ring Memory CLI. Plugin version 3.0.1 targets the upstream `tree-ring` 0.13 command and JSON contracts; it does not maintain a second Python memory engine.
 
 The Rust CLI owns validation, sensitivity classification, SQLite/FTS storage, recall ranking, import/export, audit, consolidation, maintenance, DOX/Revolve adapters, coordinated write authorization, and integration discovery. The plugin owns Agent Zero context mapping, tools, API envelopes, Web UI shaping, safe host paths, runtime status, and guarded migration.
 
@@ -121,7 +121,7 @@ The v0.13 CLI does not expose query-wide forget, selected-memory export, Markdow
 
 ![Tree Ring Memory dashboard](screenshots/tree-ring-memory-dashboard.png)
 
-The panel provides runtime/schema readiness, write-policy status, search, ring/event filters, memory detail, ring-derived copies, delete/redact, consolidation, safe DOX/Revolve previews, memory and policy audit, and canonical JSONL export. Its concentric Tree Ring visual illuminates each ring relative to the busiest ring, while the adjacent ledger shows exact record counts and share of the store; selecting a ring filters the live results. The settings view also owns the explicit two-step schema upgrade and the non-secret coordinator-profile allowlist.
+The panel provides runtime/schema readiness, write-policy status, search, ring/event filters, memory detail, ring-derived copies, delete/redact, consolidation, safe DOX/Revolve previews, memory and policy audit, and canonical JSONL export. Its concentric Tree Ring visual illuminates each ring relative to the busiest ring, while the adjacent ledger shows exact record counts and share of the store; selecting a ring filters the live results. A visible writer-context selector attributes protected actions to an existing Agent Zero chat or task without weakening the server-side identity gate. The settings view also owns the explicit two-step schema upgrade, the non-secret coordinator-profile allowlist, and compatibility hydration for partial configuration saved by older releases.
 
 When the CLI is missing or incompatible, the panel stays available and shows the concrete readiness error instead of initializing a second store.
 

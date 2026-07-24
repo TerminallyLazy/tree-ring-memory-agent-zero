@@ -3,14 +3,94 @@ import { callJsonApi } from "/js/api.js";
 
 const apiPath = "/plugins/tree_ring_memory/memory_api";
 
+const mutationActions = new Set([
+    "remember",
+    "evidence",
+    "forget",
+    "consolidate",
+    "maintain",
+    "sync_dox",
+    "sync_revolve",
+    "rebuild_fts",
+]);
+
+const settingsDefaults = {
+    enabled: true,
+    cli: {
+        binary: "tree-ring",
+        required_version: "0.13.0",
+        timeout_seconds: 30,
+    },
+    storage: {
+        root: "/a0/usr/memory/tree_ring_memory",
+        legacy_sqlite_path: "/a0/usr/memory/tree_ring_memory/indexes/memory.sqlite",
+    },
+    scope: {
+        default_project_scope: "current_project",
+        allow_global: true,
+        allow_cross_project_recall: false,
+    },
+    coordination: {
+        coordinator_profiles: [],
+    },
+    recall: {
+        max_results_default: 8,
+        bridge_scan_limit: 100,
+    },
+    privacy: {
+        include_sensitive_in_recall_by_default: false,
+        export_requires_confirmation: true,
+    },
+    developer: {
+        show_ranking_scores: false,
+    },
+};
+
+function alpineStore(name) {
+    try {
+        return typeof globalThis.Alpine?.store === "function"
+            ? globalThis.Alpine.store(name)
+            : null;
+    } catch {
+        return null;
+    }
+}
+
+function activeContextId() {
+    const active = typeof globalThis.getContext === "function"
+        ? String(globalThis.getContext() || "")
+        : "";
+    if (active) return active;
+    return String(alpineStore("chats")?.getSelectedChatId?.() || "");
+}
+
 function currentContextId() {
-    return typeof globalThis.getContext === "function" ? String(globalThis.getContext() || "") : "";
+    return String(alpineStore("treeRingMemory")?.writerContextId || activeContextId() || "");
+}
+
+function mergeMissing(target, defaults) {
+    for (const [key, fallback] of Object.entries(defaults)) {
+        if (fallback && typeof fallback === "object" && !Array.isArray(fallback)) {
+            if (!target[key] || typeof target[key] !== "object" || Array.isArray(target[key])) {
+                target[key] = {};
+            }
+            mergeMissing(target[key], fallback);
+        } else if (target[key] === undefined || target[key] === null) {
+            target[key] = Array.isArray(fallback) ? [...fallback] : fallback;
+        }
+    }
+    return target;
 }
 
 async function post(action, payload = {}) {
+    const contextId = currentContextId();
+    const requiresWriter = mutationActions.has(action) || (action === "migrate" && Boolean(payload.confirm));
+    if (requiresWriter && !contextId) {
+        throw new Error("Choose a writer context or start a chat before changing Tree Ring Memory.");
+    }
     const data = await callJsonApi(apiPath, {
         action,
-        context_id: currentContextId(),
+        context_id: contextId,
         ...payload,
     });
     if (!data.ok) {
@@ -39,6 +119,65 @@ export const store = createStore("treeRingMemory", {
     maintenanceBusy: false,
     exportPath: "",
     settingsOpen: null,
+    writerContextId: "",
+
+    hydrateSettingsConfig(config) {
+        if (!config || typeof config !== "object" || Array.isArray(config)) return false;
+        mergeMissing(config, settingsDefaults);
+        return true;
+    },
+
+    writerContexts() {
+        const chatsStore = alpineStore("chats");
+        const tasksStore = alpineStore("tasks");
+        const chats = Array.isArray(chatsStore?.contexts) ? chatsStore.contexts : [];
+        const tasks = Array.isArray(tasksStore?.tasks) ? tasksStore.tasks : [];
+        const seen = new Set();
+        return [...chats, ...tasks].filter((context) => {
+            const id = String(context?.id || "");
+            if (!id || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+        });
+    },
+
+    writerContextLabel(context) {
+        if (!context) return "No writer context";
+        const name = context.name || context.task_name;
+        const fallback = context.no ? `Chat #${context.no}` : String(context.id || "Chat");
+        const project = context.project?.name;
+        return project ? `${name || fallback} · ${project}` : (name || fallback);
+    },
+
+    selectedWriterContext() {
+        const id = currentContextId();
+        return this.writerContexts().find((context) => String(context.id) === id) || null;
+    },
+
+    writerContextSummary() {
+        const selected = this.selectedWriterContext();
+        return selected
+            ? `Mutations are attributed through ${this.writerContextLabel(selected)}.`
+            : "Start a chat to establish an Agent Zero writer identity.";
+    },
+
+    syncWriterContext() {
+        const contexts = this.writerContexts();
+        const active = activeContextId();
+        if (active) {
+            this.writerContextId = active;
+            return active;
+        }
+        if (this.writerContextId && contexts.some((context) => String(context.id) === this.writerContextId)) {
+            return this.writerContextId;
+        }
+        this.writerContextId = String(contexts[0]?.id || "");
+        return this.writerContextId;
+    },
+
+    hasWriterContext() {
+        return Boolean(currentContextId());
+    },
 
     ensureSettingsUi() {
         if (this.settingsOpen) return;
@@ -169,6 +308,7 @@ export const store = createStore("treeRingMemory", {
     },
 
     async init() {
+        this.syncWriterContext();
         await this.refreshStatus();
         if (this.status.ok) {
             await Promise.all([this.refreshStats(), this.refreshPolicy()]);
@@ -176,6 +316,7 @@ export const store = createStore("treeRingMemory", {
     },
 
     async onOpen() {
+        this.syncWriterContext();
         await this.refreshStatus();
         if (!this.status.ok) return;
         await Promise.all([this.refreshStats(), this.refreshPolicy()]);

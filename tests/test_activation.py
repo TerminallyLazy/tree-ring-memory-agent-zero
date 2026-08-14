@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import importlib
 import json
+import sys
+from types import ModuleType, SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -283,3 +287,70 @@ def test_binding_reports_an_unreachable_mount(tmp_path, missing):
         assert not (project / ".tree-ring").exists()
     else:
         assert not (project / ".tree-ring/activation.json").exists()
+
+
+def test_preflight_tool_forwards_only_the_server_bound_activation(monkeypatch):
+    class FakeResponse:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    tool_module = ModuleType("helpers.tool")
+    tool_module.Tool = object
+    tool_module.Response = FakeResponse
+    plugins_module = ModuleType("helpers.plugins")
+    plugins_module.get_plugin_config = lambda *args, **kwargs: {}
+    monkeypatch.setitem(sys.modules, "helpers.tool", tool_module)
+    monkeypatch.setitem(sys.modules, "helpers.plugins", plugins_module)
+    preflight_module = importlib.import_module(
+        "usr.plugins.tree_ring_memory.tools.preflight"
+    )
+
+    binding = object()
+    agent = SimpleNamespace(
+        agent_profile="caller-spoofed",
+        project_root="/caller/project",
+        prompt="caller task text",
+        coordinator_capability="caller-capability",
+    )
+
+    class FakeToolBridge:
+        def __init__(self):
+            self.calls = []
+
+        def preflight_activation(self, received_binding):
+            self.calls.append(
+                ("preflight_activation", {"binding": received_binding})
+            )
+            return {"state": "active", "result_count": 0}
+
+    bridge = FakeToolBridge()
+    config = {"activation": {"project_root": "/trusted/project"}}
+    monkeypatch.setattr(
+        preflight_module,
+        "bridge_and_config",
+        lambda received_agent: (bridge, config) if received_agent is agent else None,
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "load_activation_binding",
+        lambda received_config: SimpleNamespace(
+            state="configured-awaiting-proof",
+            binding=binding,
+            store_id="store-fixture",
+            next_step="Run preflight.",
+            error=None,
+        )
+        if received_config is config
+        else None,
+        raising=False,
+    )
+
+    tool = preflight_module.Preflight()
+    tool.agent = agent
+    response = asyncio.run(tool.execute())
+
+    assert bridge.calls == [("preflight_activation", {"binding": binding})]
+    assert response.additional["tree_ring_memory"]["data"] == {
+        "state": "active",
+        "result_count": 0,
+    }

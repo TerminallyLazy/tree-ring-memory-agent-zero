@@ -50,30 +50,42 @@ class ActivationBindingStatus:
 def load_activation_binding(config: dict[str, Any]) -> ActivationBindingStatus:
     """Read and validate the project-local Agent Zero activation binding."""
 
-    project_root = paths.activation_project_root(config)
+    activation = config.get("activation")
+    activation = activation if isinstance(activation, dict) else {}
+    configuration_error = activation.get("_project_root_error")
+    if configuration_error:
+        return _needs_user_review(str(configuration_error))
+    if activation.get("_scope_conflict"):
+        return _needs_user_review(
+            "The activation project root conflicts with scope.allowed_project_root."
+        )
+
+    try:
+        project_root = paths.activation_project_root(config)
+    except (OSError, ValueError):
+        return _needs_user_review("The configured activation project root is invalid.")
     if project_root is None:
         return _needs_project_mount("No activation project mount is configured.")
 
-    activation = config.get("activation") or {}
     if activation.get("enabled") is False:
-        return ActivationBindingStatus(
-            state="needs-user-review",
-            binding=None,
-            next_step="Enable activation for the selected project or remove the project binding.",
-            error="Activation is disabled while a project mount is selected.",
+        return _needs_user_review(
+            "Activation is disabled while a project mount is selected.",
+            "Enable activation for the selected project or remove the project binding.",
         )
     configured_protocol = activation.get("protocol_version", ACTIVATION_PROTOCOL_VERSION)
     if not _is_version(configured_protocol) or configured_protocol != ACTIVATION_PROTOCOL_VERSION:
-        return ActivationBindingStatus(
-            state="needs-user-review",
-            binding=None,
-            next_step="Set activation.protocol_version to 1 after reviewing plugin compatibility.",
-            error="The configured activation protocol is unsupported.",
+        return _needs_user_review(
+            "The configured activation protocol is unsupported.",
+            "Set activation.protocol_version to 1 after reviewing plugin compatibility.",
         )
 
     if not project_root.is_dir():
         return _needs_project_mount("The configured project root is not reachable.")
     memory_root = (project_root / ".tree-ring").resolve()
+    if not _is_under(project_root, memory_root):
+        return _needs_project_mount(
+            "The mounted project .tree-ring root escapes the configured project root."
+        )
     if not memory_root.is_dir():
         return _needs_project_mount("The mounted project .tree-ring root is not reachable.")
 
@@ -128,6 +140,15 @@ def _needs_project_mount(error: str) -> ActivationBindingStatus:
 def _failed(error: str) -> ActivationBindingStatus:
     next_step = "Repair the project activation files, then run tree-ring init again."
     return ActivationBindingStatus(state="failed", binding=None, next_step=next_step, error=error)
+
+
+def _needs_user_review(error: str, next_step: str | None = None) -> ActivationBindingStatus:
+    return ActivationBindingStatus(
+        state="needs-user-review",
+        binding=None,
+        next_step=next_step or "Resolve the project activation configuration before retrying.",
+        error=error,
+    )
 
 
 def _read_json_object(path: Path, label: str) -> dict[str, Any]:

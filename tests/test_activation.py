@@ -7,6 +7,7 @@ import pytest
 
 from usr.plugins.tree_ring_memory.helpers.activation import load_activation_binding
 from usr.plugins.tree_ring_memory.helpers.config import load_config
+from usr.plugins.tree_ring_memory.helpers import paths
 
 
 FINGERPRINT = "a" * 64
@@ -211,6 +212,39 @@ def test_binding_requires_user_review_when_selected_activation_is_disabled(tmp_p
 
     assert status.state == "needs-user-review"
     assert status.binding is None
+
+
+def test_binding_requires_user_review_for_conflicting_activation_and_scope_roots(tmp_path):
+    project = tmp_path / "project"
+    other_project = tmp_path / "other-project"
+    config = load_config(
+        {
+            "activation": {"project_root": str(project)},
+            "scope": {"allowed_project_root": str(other_project)},
+        }
+    )
+
+    status = load_activation_binding(config)
+
+    assert status.state == "needs-user-review"
+    assert status.binding is None
+    with pytest.raises(ValueError, match="conflicts"):
+        paths.safe_project_root(config, None)
+
+
+def test_binding_rejects_a_tree_ring_symlink_outside_the_selected_project(tmp_path):
+    project = tmp_path / "project"
+    outside_project = write_protocol_one_project(tmp_path / "outside-project")
+    project.mkdir()
+    (project / ".tree-ring").symlink_to(
+        outside_project / ".tree-ring", target_is_directory=True
+    )
+
+    status = load_activation_binding(activation_config(project))
+
+    assert status.state == "needs-project-mount"
+    assert status.binding is None
+    assert "escapes" in (status.error or "")
 
 
 @pytest.mark.parametrize("missing", ["project", "memory-root", "manifest"])

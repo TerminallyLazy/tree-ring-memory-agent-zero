@@ -69,6 +69,8 @@ def load_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
 
     supplied = copy.deepcopy(_read_local_config() if config is None else config)
     loaded = merge(DEFAULT_CONFIG, supplied)
+    loaded["activation"] = _mapping_or_default(loaded.get("activation"), "activation")
+    loaded["scope"] = _mapping_or_default(loaded.get("scope"), "scope")
     supplied_storage = supplied.get("storage") if isinstance(supplied.get("storage"), dict) else {}
     supplied_activation = (
         supplied.get("activation") if isinstance(supplied.get("activation"), dict) else {}
@@ -125,18 +127,34 @@ def load_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
         if str(profile).strip()
     ]
 
-    activation = loaded.setdefault("activation", {})
-    env_project_root = os.environ.get("TREE_RING_MEMORY_PROJECT_ROOT")
-    configured_project_root = supplied_activation.get("project_root")
-    compatibility_project_root = supplied_scope.get("allowed_project_root")
+    activation = loaded["activation"]
+    scope = loaded["scope"]
+    env_project_root, env_error = _normalize_project_root(
+        os.environ.get("TREE_RING_MEMORY_PROJECT_ROOT")
+    )
+    configured_project_root, activation_error = _normalize_project_root(
+        supplied_activation.get("project_root")
+    )
+    compatibility_project_root, scope_error = _normalize_project_root(
+        supplied_scope.get("allowed_project_root")
+    )
+    conflict = _roots_disagree(configured_project_root, compatibility_project_root)
+    configuration_error = env_error or activation_error or scope_error
+    if configuration_error:
+        activation["_project_root_error"] = configuration_error
+    else:
+        activation.pop("_project_root_error", None)
+    if conflict:
+        activation["_scope_conflict"] = True
+    else:
+        activation.pop("_scope_conflict", None)
+
     selected_project_root = (
         env_project_root or configured_project_root or compatibility_project_root or None
     )
-    activation["project_root"] = (
-        str(Path(str(selected_project_root)).expanduser()) if selected_project_root else None
-    )
-    if env_project_root:
-        loaded.setdefault("scope", {})["allowed_project_root"] = env_project_root
+    activation["project_root"] = selected_project_root
+    if selected_project_root:
+        scope["allowed_project_root"] = selected_project_root
     return loaded
 
 
@@ -154,3 +172,29 @@ def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int
     except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(maximum, parsed))
+
+
+def _mapping_or_default(value: Any, section: str) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return copy.deepcopy(DEFAULT_CONFIG[section])
+
+
+def _normalize_project_root(value: Any) -> tuple[str | None, str | None]:
+    if value is None or value == "":
+        return None, None
+    if not isinstance(value, (str, os.PathLike)):
+        return None, "The configured project root is not a path."
+    try:
+        return str(Path(value).expanduser()), None
+    except (OSError, TypeError, ValueError):
+        return None, "The configured project root is invalid."
+
+
+def _roots_disagree(left: str | None, right: str | None) -> bool:
+    if not left or not right:
+        return False
+    try:
+        return Path(left).expanduser().resolve() != Path(right).expanduser().resolve()
+    except (OSError, ValueError):
+        return True

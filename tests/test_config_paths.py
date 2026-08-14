@@ -90,6 +90,41 @@ def test_activation_project_root_uses_explicit_scope_compatibility_value(tmp_pat
     ).resolve()
 
 
+def test_explicit_activation_root_constrains_operational_project_paths(tmp_path):
+    project = tmp_path / "project"
+    outside = tmp_path / "outside"
+    project.mkdir()
+    outside.mkdir()
+    config = load_config({"activation": {"project_root": str(project)}})
+
+    assert config["scope"]["allowed_project_root"] == str(project)
+    assert paths.allowed_project_root(config) == project.resolve()
+    assert paths.safe_project_root(config, None) == project.resolve()
+    with pytest.raises(ValueError, match="Unsafe path"):
+        paths.safe_project_root(config, str(outside))
+
+
+@pytest.mark.parametrize(
+    ("activation", "scope"),
+    [
+        (None, None),
+        ("not-a-mapping", "not-a-mapping"),
+    ],
+)
+def test_non_mapping_activation_and_scope_are_normalized_with_environment_override(
+    tmp_path, monkeypatch, activation, scope
+):
+    project = tmp_path / "project"
+    monkeypatch.setenv("TREE_RING_MEMORY_PROJECT_ROOT", str(project))
+
+    config = load_config({"activation": activation, "scope": scope})
+
+    assert isinstance(config["activation"], dict)
+    assert isinstance(config["scope"], dict)
+    assert config["activation"]["project_root"] == str(project)
+    assert paths.allowed_project_root(config) == project.resolve()
+
+
 def test_activation_paths_have_no_repository_default():
     config = load_config({})
 

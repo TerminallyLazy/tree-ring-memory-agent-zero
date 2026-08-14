@@ -44,6 +44,17 @@ provenance_value() {
   printf '%s\n' "$value"
 }
 
+require_provenance() {
+  key=$1
+  expected=$2
+  file=$3
+  actual=$(provenance_value "$key" "$file")
+  [ "$actual" = "$expected" ] || {
+    printf '%s\n' "error: expected $key=$expected in $file, got $actual" >&2
+    exit 65
+  }
+}
+
 verify_artifact() {
   artifact=$1
   expected_machine=$2
@@ -78,17 +89,17 @@ verify_artifact() {
   }
 
   provenance="$artifact/PROVENANCE.txt"
-  [ "$(provenance_value source_repository "$provenance")" = "$EXPECTED_REPOSITORY" ] || exit 65
-  [ "$(provenance_value source_tag "$provenance")" = "$EXPECTED_TAG" ] || exit 65
+  require_provenance source_repository "$EXPECTED_REPOSITORY" "$provenance"
+  require_provenance source_tag "$EXPECTED_TAG" "$provenance"
   source_commit=$(provenance_value source_commit "$provenance")
   printf '%s\n' "$source_commit" | grep -Eq '^[0-9a-f]{40}$' || {
     printf '%s\n' "error: source_commit must be a resolved 40-character commit: $artifact" >&2
     exit 65
   }
-  [ "$(provenance_value build_image "$provenance")" = "$EXPECTED_IMAGE" ] || exit 65
-  [ "$(provenance_value runner "$provenance")" = "$expected_runner" ] || exit 65
-  [ "$(provenance_value machine "$provenance")" = "$expected_machine" ] || exit 65
-  [ "$(provenance_value binary_version "$provenance")" = "$EXPECTED_VERSION" ] || exit 65
+  require_provenance build_image "$EXPECTED_IMAGE" "$provenance"
+  require_provenance runner "$expected_runner" "$provenance"
+  require_provenance machine "$expected_machine" "$provenance"
+  require_provenance binary_version "$EXPECTED_VERSION" "$provenance"
 
   printf '%s\n' "$source_commit"
 }

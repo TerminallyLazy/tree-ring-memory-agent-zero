@@ -7,6 +7,7 @@ from usr.plugins.tree_ring_memory.tools._common import (
     activation_state_payload,
     bridge_and_config,
     tool_error,
+    tool_response,
     tool_success,
 )
 
@@ -18,8 +19,20 @@ class Preflight(Tool):
             status = load_activation_binding(config)
             if status.binding is None or status.state != "configured-awaiting-proof":
                 response = activation_state_payload(status)
-            else:
-                response = bridge.preflight_activation(status.binding)
+                return tool_response(
+                    {
+                        "ok": False,
+                        "message": "Tree Ring preflight is not ready.",
+                        "data": response,
+                        "warnings": [],
+                        "error": response.get("error")
+                        or (
+                            "Tree Ring preflight is blocked while activation state is "
+                            f"{status.state}."
+                        ),
+                    }
+                )
+            response = bridge.preflight_activation(status.binding)
             return tool_success(response, "Tree Ring preflight complete.")
         except BRIDGE_ERRORS as exc:
             return tool_error(exc)

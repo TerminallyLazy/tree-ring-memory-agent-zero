@@ -137,8 +137,18 @@ def _ensure_auto_bootstrap(config: dict[str, Any]) -> dict[str, Any] | None:
         if root in _BOOTSTRAPPED_ROOTS:
             return None
         report = bootstrap_runtime(config)
-        _BOOTSTRAPPED_ROOTS.add(root)
+        if _should_cache_bootstrap(report):
+            _BOOTSTRAPPED_ROOTS.add(root)
         return report
+
+
+def _should_cache_bootstrap(report: dict[str, Any]) -> bool:
+    activation = report.get("activation")
+    return not (
+        report.get("ready") is False
+        and isinstance(activation, dict)
+        and activation.get("state") == "needs-project-mount"
+    )
 
 
 def install(**kwargs: Any) -> bool:

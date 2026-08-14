@@ -17,6 +17,22 @@ from usr.plugins.tree_ring_memory.helpers import paths
 FINGERPRINT = "a" * 64
 
 
+def import_preflight_module(monkeypatch):
+    class FakeResponse:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    tool_module = ModuleType("helpers.tool")
+    tool_module.Tool = object
+    tool_module.Response = FakeResponse
+    plugins_module = ModuleType("helpers.plugins")
+    plugins_module.get_plugin_config = lambda *args, **kwargs: {}
+    monkeypatch.setitem(sys.modules, "helpers.tool", tool_module)
+    monkeypatch.setitem(sys.modules, "helpers.plugins", plugins_module)
+    sys.modules.pop("usr.plugins.tree_ring_memory.tools.preflight", None)
+    return importlib.import_module("usr.plugins.tree_ring_memory.tools.preflight")
+
+
 def write_protocol_one_project(
     project: Path,
     *,
@@ -290,20 +306,7 @@ def test_binding_reports_an_unreachable_mount(tmp_path, missing):
 
 
 def test_preflight_tool_forwards_only_the_server_bound_activation(monkeypatch):
-    class FakeResponse:
-        def __init__(self, **kwargs):
-            self.__dict__.update(kwargs)
-
-    tool_module = ModuleType("helpers.tool")
-    tool_module.Tool = object
-    tool_module.Response = FakeResponse
-    plugins_module = ModuleType("helpers.plugins")
-    plugins_module.get_plugin_config = lambda *args, **kwargs: {}
-    monkeypatch.setitem(sys.modules, "helpers.tool", tool_module)
-    monkeypatch.setitem(sys.modules, "helpers.plugins", plugins_module)
-    preflight_module = importlib.import_module(
-        "usr.plugins.tree_ring_memory.tools.preflight"
-    )
+    preflight_module = import_preflight_module(monkeypatch)
 
     binding = object()
     agent = SimpleNamespace(
@@ -354,3 +357,79 @@ def test_preflight_tool_forwards_only_the_server_bound_activation(monkeypatch):
         "state": "active",
         "result_count": 0,
     }
+
+
+@pytest.mark.parametrize(
+    ("state", "binding", "store_id", "error", "expected_data"),
+    [
+        (
+            "needs-project-mount",
+            None,
+            None,
+            "The configured project root is not reachable.",
+            {
+                "state": "needs-project-mount",
+                "next_step": "Configure activation.project_root to the mounted project root.",
+                "error": "The configured project root is not reachable.",
+            },
+        ),
+        (
+            "active-isolated",
+            object(),
+            "store-fixture",
+            None,
+            {
+                "state": "active-isolated",
+                "next_step": "Point storage.root at the mounted project .tree-ring root to share memory.",
+                "store_id": "store-fixture",
+            },
+        ),
+        (
+            "failed",
+            None,
+            None,
+            "The core Agent Zero binding is invalid.",
+            {
+                "state": "failed",
+                "next_step": "Repair the project activation files, then run tree-ring init again.",
+                "error": "The core Agent Zero binding is invalid.",
+            },
+        ),
+    ],
+)
+def test_preflight_tool_returns_not_ready_state_without_cli_dispatch(
+    monkeypatch, state, binding, store_id, error, expected_data
+):
+    preflight_module = import_preflight_module(monkeypatch)
+
+    class FakeToolBridge:
+        def preflight_activation(self, received_binding):
+            raise AssertionError(
+                f"preflight must not dispatch for {state}: {received_binding!r}"
+            )
+
+    next_step = expected_data["next_step"]
+    monkeypatch.setattr(
+        preflight_module,
+        "bridge_and_config",
+        lambda agent: (FakeToolBridge(), {}) if agent is None else None,
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "load_activation_binding",
+        lambda config: SimpleNamespace(
+            state=state,
+            binding=binding,
+            store_id=store_id,
+            next_step=next_step,
+            error=error,
+        ),
+    )
+
+    response = asyncio.run(preflight_module.Preflight().execute())
+    payload = response.additional["tree_ring_memory"]
+
+    assert payload["ok"] is False
+    assert payload["message"] == "Tree Ring preflight is not ready."
+    assert payload["data"] == expected_data
+    assert "complete" not in response.message.lower()

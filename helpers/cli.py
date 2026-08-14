@@ -17,6 +17,7 @@ from usr.plugins.tree_ring_memory.helpers.context import (
     InvocationContext,
     coordinator_profiles,
 )
+from usr.plugins.tree_ring_memory.helpers.activation import ActivationBinding
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
@@ -59,7 +60,7 @@ class TreeRingCli:
 
     @property
     def required_version(self) -> str:
-        return str((self.config.get("cli") or {}).get("required_version") or "0.13.0")
+        return str((self.config.get("cli") or {}).get("required_version") or "0.14.0")
 
     @property
     def binary(self) -> Path:
@@ -593,6 +594,33 @@ class TreeRingCli:
             "integrations scan",
         )
 
+    def activation_status(self, binding: ActivationBinding) -> dict[str, Any]:
+        return _require_dict(
+            self._run_json(
+                ["integrations", "status", "--source-root", str(binding.project_root)]
+            ),
+            "activation status",
+        )
+
+    def preflight_activation(self, binding: ActivationBinding) -> dict[str, Any]:
+        if binding.memory_root.resolve() != self.root.resolve():
+            return {"state": "active-isolated", "store_id": binding.store_id}
+        return _require_dict(
+            self._run_json_stdin(
+                [
+                    "integrations",
+                    "preflight",
+                    "--harness",
+                    "agent-zero",
+                    "--input-json-stdin",
+                    "--context-format",
+                    "json",
+                ],
+                self._activation_identity_payload(),
+            ),
+            "activation preflight",
+        )
+
     def _import_path(self, source: Path, *, dry_run: bool, replace_existing: bool) -> dict[str, Any]:
         if not dry_run:
             self.ensure_initialized()
@@ -649,6 +677,18 @@ class TreeRingCli:
             args.extend(["--session-id", self.context.session_id])
         return args
 
+    def _activation_identity_payload(self) -> dict[str, str]:
+        payload: dict[str, str] = {}
+        for name, value in (
+            ("agent_profile", self.context.agent_profile),
+            ("project", self.context.project),
+            ("workflow_id", self.context.workflow_id),
+            ("session_id", self.context.session_id),
+        ):
+            if value:
+                payload[name] = value
+        return payload
+
     def _bound_write_project(self, project: str | None) -> str | None:
         requested = project.strip() if project else None
         active = self.context.project
@@ -665,8 +705,29 @@ class TreeRingCli:
         except json.JSONDecodeError as exc:
             raise TreeRingCliError("tree-ring returned invalid JSON for a scriptable command.") from exc
 
+    def _run_json_stdin(
+        self, args: list[str], payload: dict[str, str], *, protected: bool = False
+    ) -> Any:
+        if protected:
+            raise TreeRingCliError(
+                "Tree Ring stdin protocol commands cannot receive coordinator capabilities."
+            )
+        encoded_payload = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        self._assert_no_capability_arguments([encoded_payload])
+        output = self._invoke(
+            args, protected=protected, input_payload=encoded_payload
+        ).stdout.strip()
+        try:
+            return self._redact_payload(json.loads(output))
+        except json.JSONDecodeError as exc:
+            raise TreeRingCliError("tree-ring returned invalid JSON for a scriptable command.") from exc
+
     def _invoke(
-        self, args: list[str], *, protected: bool = False
+        self,
+        args: list[str],
+        *,
+        protected: bool = False,
+        input_payload: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         # Reject capability material before even probing the binary version.
         # This keeps an untrusted field from ever entering a process argv.
@@ -674,7 +735,10 @@ class TreeRingCli:
         _ = self.version
         command = [str(self.binary), "--root", str(self.root), "--json", *args]
         return self._run_process(
-            command, include_cwd=True, protected=protected
+            command,
+            include_cwd=True,
+            protected=protected,
+            input_payload=input_payload,
         )
 
     def _run_process(
@@ -683,20 +747,23 @@ class TreeRingCli:
         *,
         include_cwd: bool,
         protected: bool = False,
+        input_payload: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         # Defense in depth for every subprocess call, including version probes.
         self._assert_no_capability_arguments(command)
         timeout = int((self.config.get("cli") or {}).get("timeout_seconds", 30))
         try:
-            result = self.runner(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
-                cwd=str(paths.REPO_ROOT) if include_cwd else None,
-                env=self._process_environment(protected=protected),
-            )
+            kwargs: dict[str, Any] = {
+                "capture_output": True,
+                "text": True,
+                "timeout": timeout,
+                "check": False,
+                "cwd": str(paths.REPO_ROOT) if include_cwd else None,
+                "env": self._process_environment(protected=protected),
+            }
+            if input_payload is not None:
+                kwargs["input"] = input_payload
+            result = self.runner(command, **kwargs)
         except FileNotFoundError as exc:
             raise TreeRingCliError("tree-ring is not installed for the Agent Zero framework runtime.") from exc
         except subprocess.TimeoutExpired as exc:
@@ -785,7 +852,7 @@ class TreeRingCli:
             if resolved.is_file() and os.access(resolved, os.X_OK):
                 return resolved
         raise TreeRingCliError(
-            "tree-ring is not installed for this runtime. Configure cli.binary or place a v0.13.x "
+            "tree-ring is not installed for this runtime. Configure cli.binary or place a v0.14.x "
             "binary in the plugin bin directory."
         )
 

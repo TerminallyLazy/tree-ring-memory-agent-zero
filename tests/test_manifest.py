@@ -28,7 +28,7 @@ def test_manifest_declares_rust_bridge_generation():
 
     assert manifest["name"] == "tree_ring_memory"
     assert manifest["version"] == "3.0.1"
-    assert defaults["cli"]["required_version"] == "0.13.0"
+    assert defaults["cli"]["required_version"] == "0.14.0"
     assert defaults["coordination"]["coordinator_profiles"] == []
     assert defaults["storage"]["root"].endswith("/tree_ring_memory")
     assert defaults["storage"]["legacy_sqlite_path"].endswith("/indexes/memory.sqlite")

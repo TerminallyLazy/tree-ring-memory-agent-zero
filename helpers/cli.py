@@ -716,7 +716,6 @@ class TreeRingCli:
         payload: dict[str, str] = {}
         for name, value in (
             ("agent_profile", self.context.agent_profile),
-            ("project", self.context.project),
             ("workflow_id", self.context.workflow_id),
             ("session_id", self.context.session_id),
         ):

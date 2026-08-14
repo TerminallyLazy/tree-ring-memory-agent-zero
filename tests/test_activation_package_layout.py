@@ -47,6 +47,7 @@ from usr.plugins.tree_ring_memory.helpers.cli import (
     ACTIVATION_DESCRIPTOR_ENV,
     TreeRingCli,
 )
+from usr.plugins.tree_ring_memory.helpers.context import InvocationContext
 from usr.plugins.tree_ring_memory.helpers import paths
 
 tmp = Path(os.environ["TMPDIR_FOR_TREE_RING_TEST"])
@@ -85,6 +86,12 @@ bridge = TreeRingCli(
         "storage": {"root": str(memory_root)},
         "activation": {"project_root": str(project)},
     },
+    context=InvocationContext(
+        agent_profile="reviewer",
+        project="must-not-reach-core-stdin",
+        workflow_id="fanout-7",
+        session_id="session-9",
+    ),
     runner=runner,
 )
 binding = ActivationBinding(
@@ -128,6 +135,11 @@ print(json.dumps({
         assert call["env"][result["env_name"]] == descriptor
         assert descriptor not in call["command"]
         assert descriptor not in str(call["input"])
+    assert json.loads(preflight_call["input"]) == {
+        "agent_profile": "reviewer",
+        "workflow_id": "fanout-7",
+        "session_id": "session-9",
+    }
     assert result["env_name"] not in scan_call["env"]
     assert result["env_name"] not in calls[0]["env"]
 

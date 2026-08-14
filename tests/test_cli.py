@@ -109,7 +109,6 @@ def test_preflight_sends_only_server_derived_identity_over_stdin(tmp_path, monke
     ]
     assert payload == {
         "agent_profile": "reviewer",
-        "project": "proj",
         "workflow_id": "fanout-7",
         "session_id": "session-9",
     }

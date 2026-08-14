@@ -283,7 +283,7 @@ class TreeRingCli:
         explain_ranking: bool = False,
     ) -> dict[str, Any]:
         if include_superseded:
-            raise TreeRingCliError("tree-ring 0.13 recall does not expose superseded memories.")
+            raise TreeRingCliError("tree-ring recall does not expose superseded memories.")
         self.ensure_initialized()
         requested_limit = max(
             1,
@@ -414,7 +414,7 @@ class TreeRingCli:
     def forget(self, memory_id: str, *, mode: str, reason: str) -> dict[str, Any]:
         self.ensure_initialized()
         if mode not in {"delete", "redact"}:
-            raise TreeRingCliError("tree-ring 0.13 forget supports only delete or redact.")
+            raise TreeRingCliError("tree-ring forget supports only delete or redact.")
         return _require_dict(
             self._run_json(
                 ["forget", memory_id, "--mode", mode, "--reason", reason],

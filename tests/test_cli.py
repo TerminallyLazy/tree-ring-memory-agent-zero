@@ -165,17 +165,30 @@ def test_resolves_bundled_binary_for_linux_architecture(tmp_path, monkeypatch, m
     assert bridge.binary == binary.resolve()
 
 
-def test_rejects_incompatible_cli_minor_version(tmp_path):
+@pytest.mark.parametrize("installed_version", ["0.11.0", "0.13.9"])
+def test_rejects_incompatible_cli_minor_version(tmp_path, installed_version):
     binary = executable(tmp_path)
 
     def runner(command, **kwargs):
         del kwargs
-        return completed(command, "tree-ring 0.11.0\n")
+        return completed(command, f"tree-ring {installed_version}\n")
 
     bridge = TreeRingCli(config(tmp_path / "memory", binary), runner=runner)
 
     with pytest.raises(TreeRingCliError, match="requires 0.14.0 through 0.14.x"):
         _ = bridge.version
+
+
+def test_accepts_supported_cli_patch_version(tmp_path):
+    binary = executable(tmp_path)
+
+    def runner(command, **kwargs):
+        del kwargs
+        return completed(command, "tree-ring 0.14.1\n")
+
+    bridge = TreeRingCli(config(tmp_path / "memory", binary), runner=runner)
+
+    assert bridge.version == "0.14.1"
 
 
 def test_recall_preserves_rust_ranking_before_host_filters(tmp_path):
@@ -624,7 +637,7 @@ def test_real_v014_cli_round_trip_when_available(tmp_path):
     assert recalled["results"][0]["id"] == remembered["id"]
     assert audit["memory_count"] == 2
     assert Path(export["path"]).is_file()
-    assert bridge.status()["version"] == "0.14.0"
+    assert bridge.status()["version"].startswith("0.14.")
 
 
 def test_real_v014_coordinated_bridge_flow_when_available(

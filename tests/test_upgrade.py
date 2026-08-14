@@ -20,7 +20,7 @@ def configured(root: Path, binary: Path) -> dict:
         {
             "cli": {
                 "binary": str(binary),
-                "required_version": "0.13.0",
+                "required_version": "0.14.0",
                 "timeout_seconds": 10,
             },
             "storage": {"root": str(root)},
@@ -85,7 +85,7 @@ def test_status_preflights_v2_without_opening_or_migrating_store(tmp_path):
     def runner(command, **kwargs):
         del kwargs
         commands.append(command)
-        return completed(command, "tree-ring 0.13.0\n")
+        return completed(command, "tree-ring 0.14.0\n")
 
     status = TreeRingCli(configured(root, binary), runner=runner).status()
 
@@ -111,7 +111,7 @@ def test_status_preflights_real_unversioned_v012_layout_without_migrating(
     def runner(command, **kwargs):
         del kwargs
         commands.append(command)
-        return completed(command, "tree-ring 0.13.0\n")
+        return completed(command, "tree-ring 0.14.0\n")
 
     status = TreeRingCli(configured(root, binary), runner=runner).status()
 
@@ -135,7 +135,7 @@ def test_unversioned_v012_backup_is_exact_private_and_verified(tmp_path):
 
     def runner(command, **kwargs):
         del kwargs
-        return completed(command, "tree-ring 0.13.0\n")
+        return completed(command, "tree-ring 0.14.0\n")
 
     bridge = TreeRingCli(configured(root, binary), runner=runner)
     report = bridge.prepare_schema_upgrade(confirm_offline=True)
@@ -156,7 +156,7 @@ def test_upgrade_backup_is_exact_private_and_integrity_verified(tmp_path):
 
     def runner(command, **kwargs):
         del kwargs
-        return completed(command, "tree-ring 0.13.0\n")
+        return completed(command, "tree-ring 0.14.0\n")
 
     bridge = TreeRingCli(configured(root, binary), runner=runner)
     with pytest.raises(upgrade.SchemaUpgradeError, match="Stop every Tree Ring"):
@@ -187,7 +187,7 @@ def test_apply_upgrade_requires_unchanged_verified_backup(tmp_path):
     def runner(command, **kwargs):
         del kwargs
         if "--version" in command:
-            return completed(command, "tree-ring 0.13.0\n")
+            return completed(command, "tree-ring 0.14.0\n")
         if "init" in command:
             connection = sqlite3.connect(database)
             try:
@@ -225,7 +225,7 @@ def test_apply_upgrade_marks_verified_backup_complete(tmp_path):
         environment = kwargs["env"]
         assert "TREE_RING_COORDINATOR_TOKEN" not in environment
         if "--version" in command:
-            return completed(command, "tree-ring 0.13.0\n")
+            return completed(command, "tree-ring 0.14.0\n")
         if "init" in command:
             connection = sqlite3.connect(database)
             try:
@@ -251,4 +251,4 @@ def test_apply_upgrade_marks_verified_backup_complete(tmp_path):
         )
     )
     assert marker["completed_at"]
-    assert marker["tree_ring_version"] == "0.13.0"
+    assert marker["tree_ring_version"] == "0.14.0"

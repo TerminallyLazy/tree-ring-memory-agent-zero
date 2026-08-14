@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -25,18 +26,39 @@ def _read_provenance(path: Path) -> dict[str, str]:
 def test_manifest_declares_rust_bridge_generation():
     manifest = yaml.safe_load((ROOT / "plugin.yaml").read_text(encoding="utf-8"))
     defaults = yaml.safe_load((ROOT / "default_config.yaml").read_text(encoding="utf-8"))
+    capability = json.loads((ROOT / "activation-capability.json").read_text(encoding="utf-8"))
 
     assert manifest["name"] == "tree_ring_memory"
-    assert manifest["version"] == "3.0.1"
+    assert manifest["version"] == "3.1.0"
     assert defaults["cli"]["required_version"] == "0.14.0"
     assert defaults["coordination"]["coordinator_profiles"] == []
     assert defaults["storage"]["root"].endswith("/tree_ring_memory")
     assert defaults["storage"]["legacy_sqlite_path"].endswith("/indexes/memory.sqlite")
+    assert capability == {
+        "schema_version": 1,
+        "kind": "tree-ring-agent-zero-plugin-capability",
+        "plugin_id": "tree_ring_memory",
+        "plugin_version": "3.1.0",
+        "activation_protocol_version": 1,
+        "tree_ring_version": {"min": "0.14.0", "minor": "0.14"},
+        "enabled": True,
+    }
 
 
 def test_plugin_uses_hooks_without_manual_execute_script():
     assert (ROOT / "hooks.py").is_file()
     assert not (ROOT / "execute.py").exists()
+
+
+def test_pending_release_docs_do_not_represent_v013_artifacts_as_v014():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    bundled = (ROOT / "bin" / "README.md").read_text(encoding="utf-8")
+
+    assert "plugin `3.1.0` targets the Tree Ring `0.14`" in readme
+    assert "**not released or installable yet**" in readme
+    assert "must not" in readme and "`0.14` binaries" in readme
+    assert "Plugin source `3.1.0` requires Tree Ring `0.14.x`" in bundled
+    assert "unchanged `v0.13.0` release artifacts" in bundled
 
 
 def test_bundled_linux_binaries_match_declared_checksums():

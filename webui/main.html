@@ -27,7 +27,7 @@
                     <span class="material-symbols-outlined" x-text="$store.treeRingMemory.status.ok ? 'verified' : 'warning'"></span>
                     <div>
                         <strong x-text="$store.treeRingMemory.status.ok ? `tree-ring ${$store.treeRingMemory.status.version}` : ($store.treeRingMemory.status.upgrade_required ? 'Offline schema upgrade required' : 'Tree Ring CLI unavailable')"></strong>
-                        <span x-text="$store.treeRingMemory.status.ok ? ($store.treeRingMemory.status.legacy_migration_pending ? 'Legacy Python memory is preserved and awaits explicit migration.' : `Rust-owned schema v${$store.treeRingMemory.status.schema_version} storage is ready.`) : ($store.treeRingMemory.status.error || 'Configure a compatible v0.13.x binary in plugin settings.')"></span>
+                        <span x-text="$store.treeRingMemory.status.ok ? ($store.treeRingMemory.status.legacy_migration_pending ? 'Legacy Python memory is preserved and awaits explicit migration.' : `Rust-owned schema v${$store.treeRingMemory.status.schema_version} storage is ready.`) : ($store.treeRingMemory.status.error || 'Configure a compatible v0.14.x binary in plugin settings after the release artifacts are available.')"></span>
                         <span x-show="$store.treeRingMemory.status.ok" x-text="`Write policy: ${$store.treeRingMemory.policyLabel()}. This is not a read ACL.`"></span>
                         <span x-text="$store.treeRingMemory.activationLabel()"></span>
                         <span x-show="$store.treeRingMemory.status.activation?.next_step" x-text="$store.treeRingMemory.status.activation ? $store.treeRingMemory.status.activation.next_step : ''"></span>

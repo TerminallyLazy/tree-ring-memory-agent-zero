@@ -9,10 +9,22 @@ PLUGIN_NAME = "tree_ring_memory"
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = PLUGIN_DIR.parents[2]
 DEFAULT_MEMORY_ROOT = Path("/a0/usr/memory/tree_ring_memory")
+ACTIVATION_CAPABILITY_FILENAME = "activation-capability.json"
 
 
 def plugin_path(*parts: str) -> Path:
     return PLUGIN_DIR.joinpath(*parts)
+
+
+def activation_capability_path() -> Path:
+    """Return the fixed, plugin-owned Agent Zero activation descriptor path.
+
+    This deliberately does not resolve the descriptor itself: the core validates
+    that the supplied path is a fixed non-project plugin artifact and rejects a
+    symlink or other substituted descriptor.
+    """
+
+    return plugin_path(ACTIVATION_CAPABILITY_FILENAME).absolute()
 
 
 def memory_root(config: dict[str, Any] | None = None) -> Path:

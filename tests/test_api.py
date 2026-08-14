@@ -11,7 +11,7 @@ class FakeBridge:
         self.calls: list[tuple[str, dict]] = []
 
     def status(self):
-        return {"ok": False, "required_version": "0.13.0", "error": "missing cli"}
+        return {"ok": False, "required_version": "0.14.0", "error": "missing cli"}
 
     def recall(self, query, **kwargs):
         self.calls.append(("recall", {"query": query, **kwargs}))
@@ -57,7 +57,7 @@ def test_status_preserves_readiness_details_when_cli_is_missing(monkeypatch):
     result = asyncio.run(handler.process({"action": "status"}, None))
 
     assert result["ok"] is False
-    assert result["data"]["required_version"] == "0.13.0"
+    assert result["data"]["required_version"] == "0.14.0"
     assert result["error"] == "missing cli"
 
 

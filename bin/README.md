@@ -1,5 +1,14 @@
 # Bundled Tree Ring CLI
 
+## Pending 3.1.0 release gate
+
+Plugin source `3.1.0` requires Tree Ring `0.14.x`, but the files below are
+unchanged `v0.13.0` release artifacts. They remain only as historical checksum
+and provenance evidence. Do **not** install, publish, rename, or claim them as
+compatible `0.14` binaries. Replace them only after the immutable core
+`v0.14.0` tag produces matching native Linux artifacts, checksums, and
+provenance.
+
 These executables are built from Tree Ring Memory tag `v0.13.0`, commit
 `167bc655e001112ff5593d7af0984b3e8689ea1a`, using the locked dependency graph
 and the pinned

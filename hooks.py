@@ -24,20 +24,42 @@ def bootstrap_runtime(config: dict[str, Any] | None = None) -> dict[str, Any]:
 
     resolved = load_config(config)
     activation_status = load_activation_binding(resolved)
+    bridge: TreeRingCli | None = None
     if _has_explicit_activation_selection(resolved) and not _is_shared_binding(
         activation_status
     ):
         bridge = TreeRingCli(resolved)
-        initial_status = bridge.status()
-        return {
-            "ok": True,
-            "ready": False,
-            "activation": _activation_payload(activation_status),
-            "status": initial_status,
-        }
+        project_root = _project_activation_bootstrap_candidate(
+            resolved, activation_status
+        )
+        if project_root is not None:
+            try:
+                # Core owns the project binding. This descriptor-scoped init is
+                # the only activation bootstrap write the plugin is allowed to
+                # request; it never synthesizes a binding itself.
+                bridge.initialize_project_activation(project_root)
+            except TreeRingCliError as exc:
+                initial_status = bridge.status()
+                return {
+                    "ok": True,
+                    "ready": False,
+                    "activation": _activation_payload(activation_status),
+                    "status": initial_status,
+                    "message": f"Project activation bootstrap did not complete: {exc}",
+                }
+            activation_status = load_activation_binding(resolved)
+
+        if not _is_shared_binding(activation_status):
+            initial_status = bridge.status()
+            return {
+                "ok": True,
+                "ready": False,
+                "activation": _activation_payload(activation_status),
+                "status": initial_status,
+            }
 
     paths.ensure_memory_dirs(resolved)
-    bridge = TreeRingCli(resolved)
+    bridge = bridge or TreeRingCli(resolved)
     initial_status = bridge.status()
     if initial_status.get("upgrade_required"):
         return {
@@ -95,6 +117,51 @@ def _has_explicit_activation_selection(config: dict[str, Any]) -> bool:
 
 def _is_shared_binding(status: ActivationBindingStatus) -> bool:
     return status.state == "configured-awaiting-proof" and status.binding is not None
+
+
+def _project_activation_bootstrap_candidate(
+    config: dict[str, Any], status: ActivationBindingStatus
+) -> Path | None:
+    """Return the one safe project root for descriptor-scoped core init.
+
+    A plugin-selected project may be initialized only when its configured store
+    is exactly the mounted ``.tree-ring`` directory and the current failure is
+    merely the absent core activation contract. In particular, this does not
+    repair malformed manifests, a mount that escapes the project, or an
+    isolated plugin store.
+    """
+
+    if status.state not in {"needs-project-mount", "failed"}:
+        return None
+    activation = config.get("activation")
+    if not isinstance(activation, dict) or activation.get("enabled") is False:
+        return None
+    if activation.get("_project_root_error") or activation.get("_scope_conflict"):
+        return None
+
+    try:
+        project_root = paths.activation_project_root(config)
+        if project_root is None:
+            return None
+        project_root = project_root.resolve()
+        memory_root = (project_root / ".tree-ring").resolve()
+        configured_memory_root = paths.memory_root(config).expanduser().resolve()
+        memory_root.relative_to(project_root)
+    except (OSError, ValueError):
+        return None
+    if not project_root.is_dir() or configured_memory_root != memory_root:
+        return None
+    if memory_root.exists() and not memory_root.is_dir():
+        return None
+
+    manifest_path = memory_root / "activation.json"
+    if status.state == "needs-project-mount":
+        # Core may create the root or the passive manifest, but it may not
+        # replace a manifest that the plugin could not validate.
+        return project_root if not manifest_path.exists() else None
+    if status.error == "The core Agent Zero binding is missing; run tree-ring init.":
+        return project_root
+    return None
 
 
 def _activation_payload(

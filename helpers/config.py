@@ -138,7 +138,8 @@ def load_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
     compatibility_project_root, scope_error = _normalize_project_root(
         supplied_scope.get("allowed_project_root")
     )
-    conflict = _roots_disagree(configured_project_root, compatibility_project_root)
+    activation_source_root = env_project_root or configured_project_root
+    conflict = _roots_disagree(activation_source_root, compatibility_project_root)
     configuration_error = env_error or activation_error or scope_error
     if configuration_error:
         activation["_project_root_error"] = configuration_error
@@ -153,7 +154,7 @@ def load_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
         env_project_root or configured_project_root or compatibility_project_root or None
     )
     activation["project_root"] = selected_project_root
-    if selected_project_root:
+    if selected_project_root and not conflict:
         scope["allowed_project_root"] = selected_project_root
     return loaded
 

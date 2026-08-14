@@ -232,6 +232,24 @@ def test_binding_requires_user_review_for_conflicting_activation_and_scope_roots
         paths.safe_project_root(config, None)
 
 
+def test_binding_requires_user_review_for_conflicting_environment_and_scope_roots(
+    tmp_path, monkeypatch
+):
+    environment_project = tmp_path / "environment-project"
+    scope_project = tmp_path / "scope-project"
+    monkeypatch.setenv("TREE_RING_MEMORY_PROJECT_ROOT", str(environment_project))
+    config = load_config({"scope": {"allowed_project_root": str(scope_project)}})
+
+    status = load_activation_binding(config)
+
+    assert config["activation"]["project_root"] == str(environment_project)
+    assert config["scope"]["allowed_project_root"] == str(scope_project)
+    assert status.state == "needs-user-review"
+    assert status.binding is None
+    with pytest.raises(ValueError, match="conflicts"):
+        paths.allowed_project_root(config)
+
+
 def test_binding_rejects_a_tree_ring_symlink_outside_the_selected_project(tmp_path):
     project = tmp_path / "project"
     outside_project = write_protocol_one_project(tmp_path / "outside-project")

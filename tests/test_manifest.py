@@ -9,7 +9,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE_RELEASE_COMMIT = "167bc655e001112ff5593d7af0984b3e8689ea1a"
+CORE_RELEASE_COMMIT = "95fa299417f39ef4947433d88086c4e8de541ca5"
 BOOKWORM_IMAGE = (
     "rust:1.95-bookworm"
     "@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1"
@@ -101,7 +101,7 @@ def test_bundled_linux_binaries_match_declared_checksums():
             assert hashlib.file_digest(handle, "sha256").hexdigest() == checksums[relative]
 
 
-def test_bundled_linux_binaries_have_v013_native_build_provenance():
+def test_bundled_linux_binaries_have_v014_native_build_provenance():
     expected = {
         "linux-aarch64": ("ubuntu-24.04-arm", "aarch64"),
         "linux-x86_64": ("ubuntu-24.04", "x86_64"),
@@ -112,12 +112,12 @@ def test_bundled_linux_binaries_have_v013_native_build_provenance():
         assert provenance["source_repository"] == (
             "https://github.com/TerminallyLazy/Tree-Ring-Memory"
         )
-        assert provenance["source_tag"] == "v0.13.0"
+        assert provenance["source_tag"] == "v0.14.0"
         assert provenance["source_commit"] == CORE_RELEASE_COMMIT
         assert provenance["build_image"] == BOOKWORM_IMAGE
         assert provenance["runner"] == runner
         assert provenance["machine"] == machine
-        assert provenance["binary_version"] == "tree-ring 0.13.0"
+        assert provenance["binary_version"] == "tree-ring 0.14.0"
         required_glibc = tuple(
             int(component)
             for component in provenance["maximum_required_glibc"]

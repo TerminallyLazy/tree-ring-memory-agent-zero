@@ -601,7 +601,7 @@ def test_real_v014_cli_round_trip_when_available(tmp_path):
     binary = os.environ.get("TREE_RING_MEMORY_CLI") or shutil.which("tree-ring")
     if not binary:
         pytest.skip("tree-ring CLI is not available in this runtime")
-    root = tmp_path / "memory"
+    root = tmp_path / "project" / ".tree-ring"
     bridge = TreeRingCli(config(root, binary))
     try:
         _ = bridge.version
@@ -645,7 +645,7 @@ def test_real_v014_coordinated_bridge_flow_when_available(
     binary = os.environ.get("TREE_RING_MEMORY_CLI") or shutil.which("tree-ring")
     if not binary:
         pytest.skip("tree-ring CLI is not available in this runtime")
-    root = tmp_path / "coordinated-memory"
+    root = tmp_path / "coordinated-project" / ".tree-ring"
     configured = config(root, binary)
     configured["coordination"] = {"coordinator_profiles": ["coordinator"]}
     probe = TreeRingCli(configured)

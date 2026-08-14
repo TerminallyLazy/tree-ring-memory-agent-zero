@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-SUPPORTED_TREE_RING_VERSION = "0.13.0"
+SUPPORTED_TREE_RING_VERSION = "0.14.0"
 DEFAULT_MEMORY_ROOT = "/a0/usr/memory/tree_ring_memory"
 LOCAL_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.json"
 
@@ -21,6 +21,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "storage": {
         "root": DEFAULT_MEMORY_ROOT,
         "legacy_sqlite_path": f"{DEFAULT_MEMORY_ROOT}/indexes/memory.sqlite",
+    },
+    "activation": {
+        "enabled": True,
+        "protocol_version": 1,
+        "project_root": None,
     },
     "scope": {
         "default_project_scope": "current_project",
@@ -64,7 +69,13 @@ def load_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
 
     supplied = copy.deepcopy(_read_local_config() if config is None else config)
     loaded = merge(DEFAULT_CONFIG, supplied)
+    loaded["activation"] = _mapping_or_default(loaded.get("activation"), "activation")
+    loaded["scope"] = _mapping_or_default(loaded.get("scope"), "scope")
     supplied_storage = supplied.get("storage") if isinstance(supplied.get("storage"), dict) else {}
+    supplied_activation = (
+        supplied.get("activation") if isinstance(supplied.get("activation"), dict) else {}
+    )
+    supplied_scope = supplied.get("scope") if isinstance(supplied.get("scope"), dict) else {}
     storage = loaded.setdefault("storage", {})
 
     env_root = os.environ.get("TREE_RING_MEMORY_ROOT") or os.environ.get("TREE_RING_MEMORY_DATA_DIR")
@@ -116,10 +127,35 @@ def load_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
         if str(profile).strip()
     ]
 
-    if os.environ.get("TREE_RING_MEMORY_PROJECT_ROOT"):
-        loaded.setdefault("scope", {})["allowed_project_root"] = os.environ[
-            "TREE_RING_MEMORY_PROJECT_ROOT"
-        ]
+    activation = loaded["activation"]
+    scope = loaded["scope"]
+    env_project_root, env_error = _normalize_project_root(
+        os.environ.get("TREE_RING_MEMORY_PROJECT_ROOT")
+    )
+    configured_project_root, activation_error = _normalize_project_root(
+        supplied_activation.get("project_root")
+    )
+    compatibility_project_root, scope_error = _normalize_project_root(
+        supplied_scope.get("allowed_project_root")
+    )
+    activation_source_root = env_project_root or configured_project_root
+    conflict = _roots_disagree(activation_source_root, compatibility_project_root)
+    configuration_error = env_error or activation_error or scope_error
+    if configuration_error:
+        activation["_project_root_error"] = configuration_error
+    else:
+        activation.pop("_project_root_error", None)
+    if conflict:
+        activation["_scope_conflict"] = True
+    else:
+        activation.pop("_scope_conflict", None)
+
+    selected_project_root = (
+        env_project_root or configured_project_root or compatibility_project_root or None
+    )
+    activation["project_root"] = selected_project_root
+    if selected_project_root and not conflict:
+        scope["allowed_project_root"] = selected_project_root
     return loaded
 
 
@@ -137,3 +173,29 @@ def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int
     except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(maximum, parsed))
+
+
+def _mapping_or_default(value: Any, section: str) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    return copy.deepcopy(DEFAULT_CONFIG[section])
+
+
+def _normalize_project_root(value: Any) -> tuple[str | None, str | None]:
+    if value is None or value == "":
+        return None, None
+    if not isinstance(value, (str, os.PathLike)):
+        return None, "The configured project root is not a path."
+    try:
+        return str(Path(value).expanduser()), None
+    except (OSError, TypeError, ValueError):
+        return None, "The configured project root is invalid."
+
+
+def _roots_disagree(left: str | None, right: str | None) -> bool:
+    if not left or not right:
+        return False
+    try:
+        return Path(left).expanduser().resolve() != Path(right).expanduser().resolve()
+    except (OSError, ValueError):
+        return True

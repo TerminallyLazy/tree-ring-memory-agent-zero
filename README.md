@@ -1,26 +1,65 @@
 # Tree Ring Memory for Agent Zero
 
-This plugin is an Agent Zero bridge to the Rust-native Tree Ring Memory CLI. Plugin version 3.0.1 targets the upstream `tree-ring` 0.13 command and JSON contracts; it does not maintain a second Python memory engine.
+> Pending compatibility branch: plugin `3.1.0` targets the Tree Ring `0.14`
+> activation protocol. It is **not released or installable yet**. The immutable
+> core `v0.14.0` tag and matching native Linux artifacts do not exist on this
+> branch, so no live activation claim is warranted.
+
+This plugin is an Agent Zero bridge to the Rust-native Tree Ring Memory CLI. It
+does not maintain a second Python memory engine.
 
 The Rust CLI owns validation, sensitivity classification, SQLite/FTS storage, recall ranking, import/export, audit, consolidation, maintenance, DOX/Revolve adapters, coordinated write authorization, and integration discovery. The plugin owns Agent Zero context mapping, tools, API envelopes, Web UI shaping, safe host paths, runtime status, and guarded migration.
 
-## Install
+## Release boundary
 
-In Agent Zero, open **Plugins → Install**, choose the Git repository option, and use:
+This source branch deliberately carries a future metadata/configuration contract
+ahead of its distributable runtime:
+
+- Plugin `3.1.0` requires `tree-ring` `0.14.x`.
+- The checked-in `bin/` files, their provenance, checksums, and the binary
+  workflow are still the released `v0.13.0` artifacts. They are historical
+  evidence only and **must not** be republished, installed, or represented as
+  `0.14` binaries.
+- A release requires the immutable core `v0.14.0` tag plus matching native
+  Linux artifacts, checksums, and provenance. Only then may this plugin be
+  installed or published as a compatible release.
+
+### Release handoff
+
+Once the core tag has been created, run the plugin's manual **Prepare Tree Ring
+0.14 bundled binaries** workflow. Download both architecture artifacts from
+the same successful run and stage them with
+[`scripts/stage-v014-bundled-binaries.sh`](scripts/stage-v014-bundled-binaries.sh).
+That command verifies the artifacts' per-architecture checksums, immutable tag
+provenance, resolved source commit, native runner/machine, pinned build image,
+and CLI version before it can replace `bin/`. Then run the real-core test suite
+with the released executable, review the complete `bin/` diff, change this
+pending-release wording, and only then create the plugin's `3.1.0` release.
+
+## Install after release
+
+After the compatible release artifacts exist, in Agent Zero open **Plugins →
+Install**, choose the Git repository option, and use:
 
 ```text
 https://github.com/TerminallyLazy/tree-ring-memory-agent-zero
 ```
 
-The installer clones this repository into `usr/plugins/tree_ring_memory`, then `hooks.py` validates the packaged CLI and initializes a new Rust store. Existing memory under `usr/memory/tree_ring_memory` is preserved across updates and uninstall. An unversioned v0.12 or versioned schema-v1/v2 Rust store is detected before the CLI can open it and waits for the explicit offline schema-v3 workflow below. The community marketplace entry uses the same repository and manifest.
+The installer places the plugin under `usr/plugins/tree_ring_memory`. Its hooks
+validate the released CLI and initialize only the configured Rust-owned store.
+Existing memory under `usr/memory/tree_ring_memory` is preserved across updates
+and uninstall. An unversioned v0.12 or versioned schema-v1/v2 Rust store waits
+for the explicit offline schema-v3 workflow below.
 
-## Requirements
+## Requirements after release
 
 - Agent Zero with this directory mounted at `/a0/usr/plugins/tree_ring_memory/`.
-- An executable `tree-ring` 0.13.x binary. The plugin requires at least 0.13.0 and fails closed on other minor versions. Release builds bundle Linux binaries for Agent Zero's `x86_64` and `aarch64` Docker runtimes.
+- An executable `tree-ring` `0.14.x` binary. The plugin requires at least
+  `0.14.0` and fails closed on other minor versions. Release builds bundle
+  Linux binaries for Agent Zero's `x86_64` and `aarch64` Docker runtimes.
 - Python 3.12+ in the Agent Zero framework runtime.
 
-Binary discovery order:
+Binary discovery order is:
 
 1. `TREE_RING_MEMORY_CLI` or `cli.binary`.
 2. `/a0/usr/plugins/tree_ring_memory/bin/linux-<architecture>/tree-ring`.
@@ -28,11 +67,49 @@ Binary discovery order:
 4. `<memory-root>/bin/tree-ring`.
 5. `tree-ring` on the framework runtime `PATH`.
 
-Readiness is visible in the plugin settings and Tree Ring Memory dashboard. There is no manual Execute step.
+The install hook selects only the executable already packaged for the running
+Docker architecture; it does not download or build executable code. Any
+replacement binary remains an explicit operator action.
 
-Published Linux binaries are built from the exact upstream v0.13.0 tag in matching Rust Linux environments. Operators on another platform can use Tree Ring's official installer or build from source, then configure `cli.binary` or place the executable at `usr/plugins/tree_ring_memory/bin/tree-ring`.
+## Project activation protocol after release
 
-The install hook selects only the executable already packaged for the running Docker architecture; it does not download or build executable code. Any replacement binary remains an explicit operator action.
+Project activation is a proof flow, not a marker-file claim. The user configures
+only two matching in-runtime paths:
+
+1. Mount the project read/write into Agent Zero and set
+   `activation.project_root` to that mounted project directory.
+2. Set `storage.root` to exactly
+   `<activation.project_root>/.tree-ring` and save the plugin settings.
+
+When those paths are canonical and reachable, the plugin bootstrap invokes the
+existing core command from the mounted project:
+
+```text
+tree-ring --root .tree-ring --json init
+```
+
+The plugin passes its fixed, installed, non-project
+`activation-capability.json` only in that child process environment. Users do
+not set its path, pass an environment variable, hand-write a binding, or use a
+generic `.a0` marker. Core validates the descriptor and its sibling plugin
+manifest; the plugin never writes the project binding itself.
+
+Core creation-publishes an Agent Zero binding whose persisted state remains
+`needs-plugin`, even while the installed plugin is present. Descriptor-scoped
+runtime status may derive `configured-awaiting-proof` without changing that
+passive record. In a new Agent Zero session, choose a writer context and run
+the `preflight` tool. Only its server-derived identity and a fresh matching
+project-local receipt can make runtime status `active`.
+
+If the plugin is removed, a host CLI runs without the descriptor, or a second
+agent points at a different store, status remains `needs-plugin` or
+`active-isolated` as appropriate. Multiple Agent Zero workers can share the
+same mounted `.tree-ring` root, but each receives its own receipt-backed proof;
+the core store fingerprint and project binding prevent an arbitrary mount from
+claiming that shared activation.
+
+This protocol is pending until the release boundary above is satisfied. Do not
+use the current branch to claim that a running Agent Zero instance is active.
 
 ## Storage
 
@@ -56,9 +133,13 @@ The Python-v1 database is preserved as read-only migration input:
 
 Uninstall preserves both stores. Removing the memory root remains a deliberate operator action outside automatic plugin lifecycle handling.
 
-## v0.13 Schema-v3 Upgrade
+## Schema-v3 upgrade introduced in v0.13
 
-The plugin never lets a v0.13 CLI auto-open an existing unversioned v0.12 or versioned schema-v1/v2 store. The dashboard and settings report `upgrade_required` while normal store operations remain blocked.
+The `0.14` bridge never auto-opens an existing unversioned v0.12 or versioned
+schema-v1/v2 store. The dashboard and settings report `upgrade_required` while
+normal store operations remain blocked. The `pre-v0.13` wording in backup
+filenames and markers is historical schema provenance, not a claim that a
+v0.13 runtime is supported by plugin `3.1.0`.
 
 Treat the upgrade as an offline, one-way operation:
 
@@ -112,39 +193,63 @@ This is operational write authorization for cooperative official processes shari
 - `sync_revolve`: Revolve evidence adapter; dry-run by default.
 - `import_memory`: dry-run by default, with optional duplicate replacement.
 - `export_memory`: canonical JSONL export.
+- `preflight`: produces the project-local, receipt-backed Agent Zero activation proof.
 - `policy_status`: read-only coordinated-policy status.
 - `policy_audit`: read-only protected-write authorization decisions.
 
-The v0.13 CLI does not expose query-wide forget, selected-memory export, Markdown/SQLite export, expiry, or supersession as scriptable commands. The plugin returns an explicit unsupported-operation error for those former Python-v1 surfaces.
+The `0.14` CLI does not expose query-wide forget, selected-memory export,
+Markdown/SQLite export, expiry, or supersession as scriptable commands. The
+plugin returns an explicit unsupported-operation error for those former
+Python-v1 surfaces.
 
 ## Web UI
 
 ![Tree Ring Memory dashboard](screenshots/tree-ring-memory-dashboard.png)
 
-The panel provides runtime/schema readiness, write-policy status, search, ring/event filters, memory detail, ring-derived copies, delete/redact, consolidation, safe DOX/Revolve previews, memory and policy audit, and canonical JSONL export. Its concentric Tree Ring visual illuminates each ring relative to the busiest ring, while the adjacent ledger shows exact record counts and share of the store; selecting a ring filters the live results. A visible writer-context selector attributes protected actions to an existing Agent Zero chat or task without weakening the server-side identity gate. The settings view also owns the explicit two-step schema upgrade, the non-secret coordinator-profile allowlist, and compatibility hydration for partial configuration saved by older releases.
+The panel provides runtime/schema readiness, project activation status,
+write-policy status, search, ring/event filters, memory detail, ring-derived
+copies, delete/redact, consolidation, safe DOX/Revolve previews, memory and
+policy audit, and canonical JSONL export. Its concentric Tree Ring visual
+illuminates each ring relative to the busiest ring, while the adjacent ledger
+shows exact record counts and share of the store; selecting a ring filters the
+live results. A visible writer-context selector attributes protected actions to
+an existing Agent Zero chat or task without weakening the server-side identity
+gate. The settings view owns the explicit two-step schema upgrade, the
+non-secret coordinator-profile allowlist, the mounted-project configuration,
+and compatibility hydration for partial configuration saved by older releases.
 
 When the CLI is missing or incompatible, the panel stays available and shows the concrete readiness error instead of initializing a second store.
 
 ## Lifecycle and Maintenance
 
-`hooks.py` owns automatic setup. Its install hook is idempotent, and Agent Zero runs it after both fresh installs and updates. The configuration hook provides a second idempotent bootstrap path after an update so older installations cannot remain dependent on the removed `execute.py` script. An unversioned v0.12 or versioned schema-v1/v2 preflight returns without opening the database. Before later updates, the hook exports an initialized compatible store as a recovery snapshot.
+`hooks.py` owns automatic setup. Its install hook is idempotent, and Agent Zero
+runs it after both fresh installs and updates. For a configured canonical
+mounted project root, it asks the released core to create the passive binding
+through the installed descriptor, then reloads that core-generated contract;
+it never hand-writes or upgrades an activation binding. The configuration hook
+provides a second idempotent bootstrap path after an update so older
+installations cannot remain dependent on the removed `execute.py` script. An
+unversioned v0.12 or versioned schema-v1/v2 preflight returns without opening
+the database. Before later updates, the hook exports an initialized compatible
+store as a recovery snapshot.
 
 Interactive audit, consolidation, FTS repair, DOX/Revolve previews, import preview, and export remain available through the Web UI and Agent Zero tools. Sensitive recall and export remain opt-in. DOX `AGENTS.md`, Revolve evidence, current source, tests, and explicit user instructions remain authoritative over recalled memory.
 
 ## Verification
 
-Focused tests use temporary roots and make no network calls. Set `TREE_RING_MEMORY_CLI` to include the real Rust round trip:
+Focused package-layout tests use temporary roots and make no network calls:
 
 ```bash
-TREE_RING_MEMORY_CLI=/path/to/tree-ring \
-PYTHONPATH="$PWD" \
 PYTHONDONTWRITEBYTECODE=1 \
-python3 -m pytest -q -p no:cacheprovider usr/plugins/tree_ring_memory/tests
+python3 -m pytest -q -p no:cacheprovider \
+  tests/test_manifest.py tests/test_webui.py tests/test_activation_package_layout.py
 
-node --check usr/plugins/tree_ring_memory/webui/memory-store.js
+node --check webui/memory-store.js
 ```
 
-For upstream certification, put the freshly built `target/release/tree-ring` on `PATH` and set `TREE_RING_AGENT_ZERO_ROOT` to this Agent Zero checkout.
+After the core release exists, upstream certification must use the exact released
+`target/release/tree-ring` artifact in a real Agent Zero package layout. Until
+then, this repository has no real CLI activation proof.
 
 ## Contribution Boundary
 

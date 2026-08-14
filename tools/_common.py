@@ -5,6 +5,7 @@ from typing import Any
 
 from helpers.tool import Response
 from helpers import plugins as framework_plugins
+from usr.plugins.tree_ring_memory.helpers.activation import ActivationBindingStatus
 from usr.plugins.tree_ring_memory.helpers.cli import TreeRingCli, TreeRingCliError
 from usr.plugins.tree_ring_memory.helpers.config import load_config
 from usr.plugins.tree_ring_memory.helpers.context import InvocationContext
@@ -33,6 +34,18 @@ def tool_success(data: Any, message: str) -> Response:
 
 def tool_error(error: Exception | str) -> Response:
     return tool_response({"ok": False, "data": {}, "warnings": [], "error": str(error)})
+
+
+def activation_state_payload(status: ActivationBindingStatus) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "state": status.state,
+        "next_step": status.next_step,
+    }
+    if status.store_id:
+        data["store_id"] = status.store_id
+    if status.error:
+        data["error"] = status.error
+    return data
 
 
 BRIDGE_ERRORS = (

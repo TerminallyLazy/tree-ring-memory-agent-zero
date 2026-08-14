@@ -9,10 +9,22 @@ PLUGIN_NAME = "tree_ring_memory"
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = PLUGIN_DIR.parents[2]
 DEFAULT_MEMORY_ROOT = Path("/a0/usr/memory/tree_ring_memory")
+ACTIVATION_CAPABILITY_FILENAME = "activation-capability.json"
 
 
 def plugin_path(*parts: str) -> Path:
     return PLUGIN_DIR.joinpath(*parts)
+
+
+def activation_capability_path() -> Path:
+    """Return the fixed, plugin-owned Agent Zero activation descriptor path.
+
+    This deliberately does not resolve the descriptor itself: the core validates
+    that the supplied path is a fixed non-project plugin artifact and rejects a
+    symlink or other substituted descriptor.
+    """
+
+    return plugin_path(ACTIVATION_CAPABILITY_FILENAME).absolute()
 
 
 def memory_root(config: dict[str, Any] | None = None) -> Path:
@@ -20,6 +32,17 @@ def memory_root(config: dict[str, Any] | None = None) -> Path:
     configured = storage.get("root") or storage.get("data_dir")
     env_root = os.environ.get("TREE_RING_MEMORY_ROOT") or os.environ.get("TREE_RING_MEMORY_DATA_DIR")
     return Path(str(env_root or configured or DEFAULT_MEMORY_ROOT)).expanduser()
+
+
+def activation_project_root(config: dict[str, Any] | None = None) -> Path | None:
+    activation = (config or {}).get("activation")
+    configured = activation.get("project_root") if isinstance(activation, dict) else None
+    return Path(str(configured)).expanduser().resolve() if configured else None
+
+
+def activation_manifest_path(config: dict[str, Any] | None = None) -> Path | None:
+    project_root = activation_project_root(config)
+    return (project_root / ".tree-ring" / "activation.json").resolve() if project_root else None
 
 
 def canonical_sqlite_path(config: dict[str, Any] | None = None) -> Path:
@@ -83,7 +106,18 @@ def safe_import_path(config: dict[str, Any], requested: str) -> Path:
 
 
 def allowed_project_root(config: dict[str, Any] | None = None) -> Path:
-    configured = ((config or {}).get("scope") or {}).get("allowed_project_root")
+    activation = (config or {}).get("activation")
+    activation = activation if isinstance(activation, dict) else {}
+    error = activation.get("_project_root_error")
+    if error:
+        raise ValueError(str(error))
+    if activation.get("_scope_conflict"):
+        raise ValueError("Activation project root conflicts with scope.allowed_project_root.")
+    activation_root = activation_project_root(config)
+    if activation_root:
+        return activation_root
+    scope = (config or {}).get("scope")
+    configured = scope.get("allowed_project_root") if isinstance(scope, dict) else None
     return Path(str(configured)).expanduser().resolve() if configured else REPO_ROOT.resolve()
 
 

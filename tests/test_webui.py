@@ -69,3 +69,22 @@ def test_webui_shows_explicit_two_step_schema_upgrade_controls():
     assert "Create verified upgrade backup" in config
     assert "Apply schema v3" in config
     assert "unversioned v0.12 or versioned schema-v1/v2" in config
+
+
+def test_webui_renders_only_server_provided_activation_status():
+    main = (ROOT / "webui" / "main.html").read_text(encoding="utf-8")
+    config = (ROOT / "webui" / "config.html").read_text(encoding="utf-8")
+    store = (ROOT / "webui" / "memory-store.js").read_text(encoding="utf-8")
+
+    assert "activationLabel" in store
+    assert "activation.next_step" in main + config
+    assert 'x-text="$store.treeRingMemory.activationLabel()"' in main
+    assert 'x-text="$store.treeRingMemory.activationLabel()"' in config
+    assert "TREE_RING_MEMORY_PROJECT_ROOT" not in store
+    assert "config.activation.project_root" in config
+    assert 'post("preflight")' in store
+    assert "TREE_RING_AGENT_ZERO_PLUGIN_MANIFEST" not in main + config + store
+    assert "activation-capability.json" not in main + config + store
+    assert "receipt.content" not in main + config + store
+    assert "coordinator capability" not in main.lower()
+    assert "x-html" not in main + config

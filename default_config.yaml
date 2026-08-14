@@ -1,11 +1,15 @@
 enabled: true
 cli:
   binary: tree-ring
-  required_version: 0.13.0
+  required_version: 0.14.0
   timeout_seconds: 30
 storage:
   root: /a0/usr/memory/tree_ring_memory
   legacy_sqlite_path: /a0/usr/memory/tree_ring_memory/indexes/memory.sqlite
+activation:
+  enabled: true
+  protocol_version: 1
+  project_root: null
 scope:
   default_project_scope: current_project
   allow_global: true

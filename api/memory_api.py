@@ -14,6 +14,10 @@ except ModuleNotFoundError:
 from usr.plugins.tree_ring_memory.helpers.cli import TreeRingCli, TreeRingCliError
 from usr.plugins.tree_ring_memory.helpers.config import load_config
 from usr.plugins.tree_ring_memory.helpers.context import InvocationContext
+from usr.plugins.tree_ring_memory.helpers.activation import (
+    ActivationBindingStatus,
+    load_activation_binding,
+)
 from usr.plugins.tree_ring_memory.helpers.legacy import LegacyMigrationError, LegacyMigrator
 from usr.plugins.tree_ring_memory.helpers.upgrade import SchemaUpgradeError
 from usr.plugins.tree_ring_memory.helpers.values import parse_bool
@@ -41,6 +45,16 @@ class MemoryApi(ApiHandler):
                 ),
             )
         action = str(input.get("action") or "search").strip().lower().replace("-", "_")
+        if action == "preflight":
+            unsupported = _preflight_caller_fields(input)
+            if unsupported:
+                return envelope(
+                    ok=False,
+                    error=(
+                        "Preflight identity and task text are server-derived; caller fields "
+                        "are not accepted: " + ", ".join(unsupported)
+                    ),
+                )
         try:
             require_context = action in {
                 "remember",
@@ -51,15 +65,45 @@ class MemoryApi(ApiHandler):
                 "sync_dox",
                 "sync_revolve",
                 "rebuild_fts",
+                "preflight",
             }
             if action == "migrate" and parse_bool(input.get("confirm"), False):
                 require_context = True
             bridge, config = self._bridge(
-                input, require_context=require_context
+                {} if action == "activation_status" else input,
+                require_context=require_context,
             )
+            if action == "activation_status":
+                status = load_activation_binding(config)
+                if status.binding is None or status.state != "configured-awaiting-proof":
+                    return envelope(_binding_status_payload(status))
+                cli_status = bridge.activation_status(status.binding)
+                data = _redacted_activation_payload(status, cli_status)
+                data["binding_state"] = status.state
+                return envelope(data)
+            if action == "preflight":
+                status = load_activation_binding(config)
+                if status.binding is None or status.state != "configured-awaiting-proof":
+                    return envelope(_binding_status_payload(status))
+                return envelope(bridge.preflight_activation(status.binding))
             if action == "status":
-                status = bridge.status()
-                return envelope(status, ok=bool(status.get("ok")), error=status.get("error"))
+                status = dict(bridge.status())
+                binding_status = load_activation_binding(config)
+                cli_status = None
+                if (
+                    binding_status.binding is not None
+                    and binding_status.state == "configured-awaiting-proof"
+                ):
+                    try:
+                        cli_status = bridge.activation_status(binding_status.binding)
+                    except (TreeRingCliError, OSError, ValueError):
+                        cli_status = None
+                status["activation"] = _redacted_activation_payload(
+                    binding_status, cli_status
+                )
+                return envelope(
+                    status, ok=bool(status.get("ok")), error=status.get("error")
+                )
             if action == "policy_status":
                 return envelope(bridge.policy_status())
             if action == "policy_audit":
@@ -92,7 +136,7 @@ class MemoryApi(ApiHandler):
                     return envelope(
                         ok=False,
                         error=(
-                            "tree-ring 0.13 remember does not accept: "
+                            "tree-ring 0.14 remember does not accept: "
                             + ", ".join(unsupported)
                             + ". Use the evidence action for evaluated details or store a concise summary."
                         ),
@@ -147,7 +191,7 @@ class MemoryApi(ApiHandler):
                 memory_id = str(input.get("memory_id") or "")
                 reason = str(input.get("reason") or "")
                 if not memory_id:
-                    return envelope(ok=False, error="memory_id is required; broad-query forget is not exposed by tree-ring 0.13")
+                    return envelope(ok=False, error="memory_id is required; broad-query forget is not exposed by tree-ring 0.14")
                 if not reason.strip():
                     return envelope(ok=False, error="reason is required")
                 return envelope(
@@ -187,9 +231,9 @@ class MemoryApi(ApiHandler):
                 )
             if action == "export":
                 if str(input.get("format") or "jsonl") != "jsonl":
-                    return envelope(ok=False, error="tree-ring 0.13 exports canonical JSONL only")
+                    return envelope(ok=False, error="tree-ring 0.14 exports canonical JSONL only")
                 if input.get("memory_ids"):
-                    return envelope(ok=False, error="tree-ring 0.13 does not expose selected-memory export")
+                    return envelope(ok=False, error="tree-ring 0.14 does not expose selected-memory export")
                 return envelope(
                     bridge.export_to_file(
                         output_path=_optional_text(input.get("output_path")),
@@ -344,3 +388,71 @@ def _contains_capability_field(value: Any) -> bool:
     elif isinstance(value, list):
         return any(_contains_capability_field(item) for item in value)
     return False
+
+
+def _binding_status_payload(status: ActivationBindingStatus) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "state": status.state,
+        "next_step": status.next_step,
+    }
+    if status.store_id:
+        data["store_id"] = status.store_id
+    if status.error:
+        data["error"] = status.error
+    return data
+
+
+def _redacted_activation_payload(
+    status: ActivationBindingStatus, cli_status: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    state = status.state
+    next_step = status.next_step
+    receipt_age_seconds = None
+    if isinstance(cli_status, dict):
+        if isinstance(cli_status.get("state"), str) and cli_status["state"].strip():
+            state = cli_status["state"].strip()
+        if isinstance(cli_status.get("next_step"), str) and cli_status["next_step"].strip():
+            next_step = cli_status["next_step"].strip()
+        age = cli_status.get("receipt_age_seconds")
+        if isinstance(age, (int, float)) and not isinstance(age, bool) and age >= 0:
+            receipt_age_seconds = age
+
+    data: dict[str, Any] = {
+        "state": state,
+        "receipt_age_seconds": receipt_age_seconds,
+        "next_step": next_step,
+    }
+    if status.store_id:
+        data["store_id"] = status.store_id
+    return data
+
+
+def _preflight_caller_fields(value: Any) -> list[str]:
+    rejected = {
+        "agent_profile",
+        "operation_id",
+        "project",
+        "project_root",
+        "prompt",
+        "query",
+        "session_id",
+        "task",
+        "task_hint",
+        "task_text",
+        "workflow_id",
+    }
+    found: set[str] = set()
+
+    def visit(item: Any) -> None:
+        if isinstance(item, dict):
+            for key, nested in item.items():
+                normalized = str(key).strip().lower().replace("-", "_")
+                if normalized in rejected:
+                    found.add(normalized)
+                visit(nested)
+        elif isinstance(item, list):
+            for nested in item:
+                visit(nested)
+
+    visit(value)
+    return sorted(found)

@@ -61,6 +61,29 @@ def test_pending_release_docs_do_not_represent_v013_artifacts_as_v014():
     assert "unchanged `v0.13.0` release artifacts" in bundled
 
 
+def test_v014_bundle_workflow_is_manual_and_resolves_the_future_tag_at_runtime():
+    workflow = (ROOT / ".github" / "workflows" / "build-bundled-binaries.yml").read_text(
+        encoding="utf-8"
+    )
+    stager = (ROOT / "scripts" / "stage-v014-bundled-binaries.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "workflow_dispatch:" in workflow
+    assert "pull_request:" not in workflow
+    assert "TREE_RING_RELEASE_TAG: v0.14.0" in workflow
+    assert "TREE_RING_RELEASE_VERSION: 0.14.0" in workflow
+    assert 'ref: ${{ env.TREE_RING_RELEASE_TAG }}' in workflow
+    assert 'tag_commit="$(git rev-list -n 1 "$TREE_RING_RELEASE_TAG")"' in workflow
+    assert 'echo "source_commit=$(git rev-parse HEAD)"' in workflow
+    assert "--test harness_activation_acceptance" in workflow
+    assert "tree-ring-v0.14.0-${{ matrix.target }}" in workflow
+    assert "v0.13.0" not in workflow
+    assert "EXPECTED_TAG=v0.14.0" in stager
+    assert "EXPECTED_VERSION='tree-ring 0.14.0'" in stager
+    assert "artifacts were built from different Tree Ring commits" in stager
+
+
 def test_bundled_linux_binaries_match_declared_checksums():
     checksum_lines = (ROOT / "bin" / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
     checksums = {path: digest for digest, path in (line.split(maxsplit=1) for line in checksum_lines)}

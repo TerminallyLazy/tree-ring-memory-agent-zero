@@ -3,14 +3,17 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import os
 import sys
-from types import ModuleType, SimpleNamespace
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
 from usr.plugins.tree_ring_memory.helpers.activation import load_activation_binding
+from usr.plugins.tree_ring_memory.helpers.cli import TreeRingCli
 from usr.plugins.tree_ring_memory.helpers.config import load_config
+from usr.plugins.tree_ring_memory.helpers.context import InvocationContext
 from usr.plugins.tree_ring_memory.helpers import paths
 
 
@@ -433,3 +436,43 @@ def test_preflight_tool_returns_not_ready_state_without_cli_dispatch(
     assert payload["message"] == "Tree Ring preflight is not ready."
     assert payload["data"] == expected_data
     assert "complete" not in response.message.lower()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("TREE_RING_MEMORY_CLI"),
+    reason="explicit released Tree Ring CLI not supplied",
+)
+def test_real_core_agent_zero_preflight_uses_the_project_store(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    bridge = TreeRingCli(
+        {
+            "cli": {"binary": os.environ["TREE_RING_MEMORY_CLI"]},
+            "storage": {"root": str(project / ".tree-ring")},
+            "activation": {"project_root": str(project)},
+        },
+        context=InvocationContext(
+            agent_profile="agent-zero-release-test",
+            workflow_id="release-workflow",
+            session_id="release-session",
+        ),
+    )
+
+    initialized = bridge.initialize_project_activation(project)
+    binding_status = load_activation_binding(bridge.config)
+
+    assert initialized["ok"] is True
+    assert binding_status.state == "configured-awaiting-proof"
+    assert binding_status.binding is not None
+
+    response = bridge.preflight_activation(binding_status.binding)
+    receipt = response["receipt"]
+
+    assert response["state"] == "active"
+    assert receipt["harness_id"] == "agent-zero"
+    assert receipt["store_id"] == binding_status.binding.store_id
+    assert receipt["project_root_fingerprint"] == binding_status.binding.project_root_fingerprint
+
+    status = bridge.activation_status(binding_status.binding)
+    agent_zero = next(entry for entry in status["integrations"] if entry["id"] == "agent-zero")
+    assert agent_zero["state"] == "active"

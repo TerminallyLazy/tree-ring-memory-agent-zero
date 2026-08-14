@@ -1,13 +1,16 @@
-name: Build bundled Tree Ring binaries
+name: Prepare Tree Ring 0.14 bundled binaries
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - .github/workflows/build-bundled-binaries.yml
 
 permissions:
   contents: read
+
+env:
+  TREE_RING_REPOSITORY: TerminallyLazy/Tree-Ring-Memory
+  TREE_RING_RELEASE_TAG: v0.14.0
+  TREE_RING_RELEASE_VERSION: 0.14.0
+  RUST_BOOKWORM_IMAGE: rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1
 
 jobs:
   build:
@@ -34,24 +37,28 @@ jobs:
       - name: Check out exact upstream release tag
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          repository: TerminallyLazy/Tree-Ring-Memory
-          ref: v0.13.0
+          repository: ${{ env.TREE_RING_REPOSITORY }}
+          ref: ${{ env.TREE_RING_RELEASE_TAG }}
           fetch-depth: 0
           path: upstream
 
       - name: Verify immutable source identity
         working-directory: upstream
         run: |
-          test "$(git rev-parse HEAD)" = "167bc655e001112ff5593d7af0984b3e8689ea1a"
-          test "$(git rev-list -n 1 v0.13.0)" = "167bc655e001112ff5593d7af0984b3e8689ea1a"
+          tag_commit="$(git rev-list -n 1 "$TREE_RING_RELEASE_TAG")"
+          head_commit="$(git rev-parse HEAD)"
+          git show-ref --verify --quiet "refs/tags/$TREE_RING_RELEASE_TAG"
+          test "$head_commit" = "$tag_commit"
+          printf '%s\n' "$head_commit" | grep -Eq '^[0-9a-f]{40}$'
           test "$(uname -m)" = "${{ matrix.machine }}"
 
       - name: Build and test on the native Linux architecture
         working-directory: upstream
         run: |
+          cargo test --locked -p tree-ring-memory-cli --test harness_activation_acceptance
           cargo test --locked -p tree-ring-memory-cli --test multi_agent_acceptance
           cargo build --release --locked -p tree-ring-memory-cli
-          test "$(target/release/tree-ring --version)" = "tree-ring 0.13.0"
+          test "$(target/release/tree-ring --version)" = "tree-ring $TREE_RING_RELEASE_VERSION"
 
       - name: Verify Bookworm runtime boundary and stage artifact
         working-directory: upstream
@@ -73,10 +80,10 @@ jobs:
             sha256sum -c SHA256SUM
           )
           {
-            echo "source_repository=https://github.com/TerminallyLazy/Tree-Ring-Memory"
-            echo "source_tag=v0.13.0"
-            echo "source_commit=167bc655e001112ff5593d7af0984b3e8689ea1a"
-            echo "build_image=rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1"
+            echo "source_repository=https://github.com/$TREE_RING_REPOSITORY"
+            echo "source_tag=$TREE_RING_RELEASE_TAG"
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "build_image=$RUST_BOOKWORM_IMAGE"
             echo "runner=${{ matrix.runner }}"
             echo "machine=$(uname -m)"
             echo "rustc=$(rustc --version)"
@@ -89,7 +96,7 @@ jobs:
       - name: Upload verified native binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: tree-ring-v0.13.0-${{ matrix.target }}
+          name: tree-ring-v0.14.0-${{ matrix.target }}
           path: upstream/bundle/${{ matrix.target }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90

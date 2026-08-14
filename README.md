@@ -24,6 +24,18 @@ ahead of its distributable runtime:
   Linux artifacts, checksums, and provenance. Only then may this plugin be
   installed or published as a compatible release.
 
+### Release handoff
+
+Once the core tag has been created, run the plugin's manual **Prepare Tree Ring
+0.14 bundled binaries** workflow. Download both architecture artifacts from
+the same successful run and stage them with
+[`scripts/stage-v014-bundled-binaries.sh`](scripts/stage-v014-bundled-binaries.sh).
+That command verifies the artifacts' per-architecture checksums, immutable tag
+provenance, resolved source commit, native runner/machine, pinned build image,
+and CLI version before it can replace `bin/`. Then run the real-core test suite
+with the released executable, review the complete `bin/` diff, change this
+pending-release wording, and only then create the plugin's `3.1.0` release.
+
 ## Install after release
 
 After the compatible release artifacts exist, in Agent Zero open **Plugins →

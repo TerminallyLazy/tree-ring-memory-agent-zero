@@ -32,4 +32,34 @@ From the plugin root, verify the packaged files with:
 
 ```bash
 sha256sum -c bin/SHA256SUMS
+# On macOS: shasum -a 256 -c bin/SHA256SUMS
 ```
+
+## Replacing the historical artifacts for 3.1.0
+
+After—not before—the core `v0.14.0` tag exists, manually run the pinned
+`Prepare Tree Ring 0.14 bundled binaries` GitHub Actions workflow. It checks
+out that exact tag, resolves the tag to a 40-character commit at runtime, runs
+the activation and multi-agent CLI acceptance tests, and emits one native
+artifact for each Agent Zero runtime:
+
+- `tree-ring-v0.14.0-linux-x86_64`
+- `tree-ring-v0.14.0-linux-aarch64`
+
+Download both artifacts from the same successful workflow run, then run this
+from the plugin checkout (substituting their downloaded directories):
+
+```bash
+scripts/stage-v014-bundled-binaries.sh \
+  /absolute/path/to/tree-ring-v0.14.0-linux-x86_64 \
+  /absolute/path/to/tree-ring-v0.14.0-linux-aarch64
+sha256sum -c bin/SHA256SUMS
+# On macOS: shasum -a 256 -c bin/SHA256SUMS
+```
+
+The staging command accepts only regular, checksum-matching files with
+`v0.14.0` provenance, the pinned Bookworm image, the expected native runner
+and machine, `tree-ring 0.14.0`, and the same resolved core commit for both
+architectures. It neither downloads nor builds code. Review the resulting
+`bin/` diff and update this document and the release boundary in the root
+README from pending to released only after real-core certification passes.

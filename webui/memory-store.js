@@ -12,18 +12,24 @@ const mutationActions = new Set([
     "sync_dox",
     "sync_revolve",
     "rebuild_fts",
+    "preflight",
 ]);
 
 const settingsDefaults = {
     enabled: true,
     cli: {
         binary: "tree-ring",
-        required_version: "0.13.0",
+        required_version: "0.14.0",
         timeout_seconds: 30,
     },
     storage: {
         root: "/a0/usr/memory/tree_ring_memory",
         legacy_sqlite_path: "/a0/usr/memory/tree_ring_memory/indexes/memory.sqlite",
+    },
+    activation: {
+        enabled: true,
+        protocol_version: 1,
+        project_root: "",
     },
     scope: {
         default_project_scope: "current_project",
@@ -114,7 +120,7 @@ export const store = createStore("treeRingMemory", {
     stats: { counts: {} },
     status: {
         ok: false,
-        required_version: "0.13.0",
+        required_version: "0.14.0",
         activation: {
             state: "unknown",
             receipt_age_seconds: null,
@@ -125,6 +131,7 @@ export const store = createStore("treeRingMemory", {
     policyAudit: [],
     searchBusy: false,
     maintenanceBusy: false,
+    activationBusy: false,
     exportPath: "",
     settingsOpen: null,
     writerContextId: "",
@@ -376,6 +383,25 @@ export const store = createStore("treeRingMemory", {
             this.status = response.data || { ok: false, error: response.error || "Tree Ring CLI unavailable" };
         } catch (error) {
             this.status = { ok: false, error: error.message };
+        }
+    },
+
+    async preflight() {
+        this.activationBusy = true;
+        try {
+            const response = await post("preflight");
+            const state = String(response.data?.state || "");
+            notify(
+                state === "active"
+                    ? "Tree Ring project preflight completed. Refreshing receipt-backed activation status."
+                    : "Project preflight did not produce an active receipt. Check the activation status.",
+                state === "active" ? "success" : "info",
+            );
+            await this.refreshStatus();
+        } catch (error) {
+            notify(error.message, "error");
+        } finally {
+            this.activationBusy = false;
         }
     },
 

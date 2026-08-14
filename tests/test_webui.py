@@ -81,7 +81,10 @@ def test_webui_renders_only_server_provided_activation_status():
     assert 'x-text="$store.treeRingMemory.activationLabel()"' in main
     assert 'x-text="$store.treeRingMemory.activationLabel()"' in config
     assert "TREE_RING_MEMORY_PROJECT_ROOT" not in store
-    assert "project_root" not in store
+    assert "config.activation.project_root" in config
+    assert 'post("preflight")' in store
+    assert "TREE_RING_AGENT_ZERO_PLUGIN_MANIFEST" not in main + config + store
+    assert "activation-capability.json" not in main + config + store
     assert "receipt.content" not in main + config + store
     assert "coordinator capability" not in main.lower()
     assert "x-html" not in main + config

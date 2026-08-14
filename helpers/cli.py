@@ -23,6 +23,7 @@ from usr.plugins.tree_ring_memory.helpers.activation import ActivationBinding
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 VERSION_RE = re.compile(r"\btree-ring\s+(\d+)\.(\d+)\.(\d+)(?:[-+][^\s]+)?")
 COORDINATOR_TOKEN_ENV = "TREE_RING_COORDINATOR_TOKEN"
+ACTIVATION_DESCRIPTOR_ENV = "TREE_RING_AGENT_ZERO_PLUGIN_MANIFEST"
 IDENTITY_ENV_VARS = (
     COORDINATOR_TOKEN_ENV,
     "TREE_RING_AGENT_PROFILE",
@@ -156,6 +157,38 @@ class TreeRingCli:
         if migrating:
             upgrade.mark_upgrade_completed(self.config, cli_version=self.version)
         return result
+
+    def initialize_project_activation(self, project_root: Path) -> dict[str, Any]:
+        """Let the core create the passive Agent Zero binding for one mounted project.
+
+        This is intentionally narrower than :meth:`init`: it neither creates
+        plugin-owned storage directories nor writes an activation file itself.
+        Core owns the project-local binding; the installed plugin only presents
+        its fixed capability descriptor in the child process environment.
+        """
+
+        try:
+            mounted_project = project_root.expanduser().resolve()
+            mounted_memory_root = (mounted_project / ".tree-ring").resolve()
+            configured_memory_root = self.root.expanduser().resolve()
+            mounted_memory_root.relative_to(mounted_project)
+        except (OSError, ValueError) as exc:
+            raise TreeRingCliError("The configured activation project mount is invalid.") from exc
+        if not mounted_project.is_dir():
+            raise TreeRingCliError("The configured activation project mount is not reachable.")
+        if configured_memory_root != mounted_memory_root:
+            raise TreeRingCliError(
+                "The configured memory root must be the mounted project .tree-ring root."
+            )
+        return _require_dict(
+            self._run_json(
+                ["init"],
+                activation_descriptor=True,
+                root_argument=".tree-ring",
+                cwd=mounted_project,
+            ),
+            "project activation init",
+        )
 
     def prepare_schema_upgrade(self, *, confirm_offline: bool) -> dict[str, Any]:
         _ = self.version
@@ -597,7 +630,8 @@ class TreeRingCli:
     def activation_status(self, binding: ActivationBinding) -> dict[str, Any]:
         return _require_dict(
             self._run_json(
-                ["integrations", "status", "--source-root", str(binding.project_root)]
+                ["integrations", "status", "--source-root", str(binding.project_root)],
+                activation_descriptor=True,
             ),
             "activation status",
         )
@@ -617,6 +651,7 @@ class TreeRingCli:
                     "json",
                 ],
                 self._activation_identity_payload(),
+                activation_descriptor=True,
             ),
             "activation preflight",
         )
@@ -698,15 +733,34 @@ class TreeRingCli:
             )
         return active or requested
 
-    def _run_json(self, args: list[str], *, protected: bool = False) -> Any:
-        output = self._invoke(args, protected=protected).stdout.strip()
+    def _run_json(
+        self,
+        args: list[str],
+        *,
+        protected: bool = False,
+        activation_descriptor: bool = False,
+        root_argument: str | None = None,
+        cwd: Path | None = None,
+    ) -> Any:
+        output = self._invoke(
+            args,
+            protected=protected,
+            activation_descriptor=activation_descriptor,
+            root_argument=root_argument,
+            cwd=cwd,
+        ).stdout.strip()
         try:
             return self._redact_payload(json.loads(output))
         except json.JSONDecodeError as exc:
             raise TreeRingCliError("tree-ring returned invalid JSON for a scriptable command.") from exc
 
     def _run_json_stdin(
-        self, args: list[str], payload: dict[str, str], *, protected: bool = False
+        self,
+        args: list[str],
+        payload: dict[str, str],
+        *,
+        protected: bool = False,
+        activation_descriptor: bool = False,
     ) -> Any:
         if protected:
             raise TreeRingCliError(
@@ -715,7 +769,10 @@ class TreeRingCli:
         encoded_payload = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         self._assert_no_capability_arguments([encoded_payload])
         output = self._invoke(
-            args, protected=protected, input_payload=encoded_payload
+            args,
+            protected=protected,
+            input_payload=encoded_payload,
+            activation_descriptor=activation_descriptor,
         ).stdout.strip()
         try:
             return self._redact_payload(json.loads(output))
@@ -728,17 +785,28 @@ class TreeRingCli:
         *,
         protected: bool = False,
         input_payload: str | None = None,
+        activation_descriptor: bool = False,
+        root_argument: str | None = None,
+        cwd: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         # Reject capability material before even probing the binary version.
         # This keeps an untrusted field from ever entering a process argv.
         self._assert_no_capability_arguments(args)
         _ = self.version
-        command = [str(self.binary), "--root", str(self.root), "--json", *args]
+        command = [
+            str(self.binary),
+            "--root",
+            root_argument if root_argument is not None else str(self.root),
+            "--json",
+            *args,
+        ]
         return self._run_process(
             command,
             include_cwd=True,
             protected=protected,
             input_payload=input_payload,
+            activation_descriptor=activation_descriptor,
+            cwd=cwd,
         )
 
     def _run_process(
@@ -748,6 +816,8 @@ class TreeRingCli:
         include_cwd: bool,
         protected: bool = False,
         input_payload: str | None = None,
+        activation_descriptor: bool = False,
+        cwd: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         # Defense in depth for every subprocess call, including version probes.
         self._assert_no_capability_arguments(command)
@@ -758,8 +828,15 @@ class TreeRingCli:
                 "text": True,
                 "timeout": timeout,
                 "check": False,
-                "cwd": str(paths.REPO_ROOT) if include_cwd else None,
-                "env": self._process_environment(protected=protected),
+                "cwd": (
+                    str(cwd)
+                    if cwd is not None
+                    else (str(paths.REPO_ROOT) if include_cwd else None)
+                ),
+                "env": self._process_environment(
+                    protected=protected,
+                    activation_descriptor=activation_descriptor,
+                ),
             }
             if input_payload is not None:
                 kwargs["input"] = input_payload
@@ -786,10 +863,15 @@ class TreeRingCli:
                     "Coordinator capability material is not accepted in Tree Ring command arguments."
                 )
 
-    def _process_environment(self, *, protected: bool) -> dict[str, str]:
+    def _process_environment(
+        self, *, protected: bool, activation_descriptor: bool = False
+    ) -> dict[str, str]:
         environment = dict(os.environ)
         for name in IDENTITY_ENV_VARS:
             environment.pop(name, None)
+        # Descriptor authority comes only from the installed plugin. Never let
+        # a caller or parent process select an arbitrary capability file.
+        environment.pop(ACTIVATION_DESCRIPTOR_ENV, None)
 
         if (
             protected
@@ -799,13 +881,24 @@ class TreeRingCli:
             capability = os.environ.get(COORDINATOR_TOKEN_ENV)
             if capability and capability.strip():
                 environment[COORDINATOR_TOKEN_ENV] = capability
+        if activation_descriptor:
+            environment[ACTIVATION_DESCRIPTOR_ENV] = self._activation_descriptor_path()
         return environment
+
+    def _activation_descriptor_path(self) -> str:
+        descriptor = paths.activation_capability_path()
+        if descriptor.is_symlink() or not descriptor.is_file():
+            raise TreeRingCliError(
+                "The installed Tree Ring Agent Zero activation capability is unavailable."
+            )
+        return str(descriptor)
 
     def _redact_capability(self, value: str) -> str:
         redacted = CAPABILITY_RE.sub("[REDACTED]", value)
         capability = os.environ.get(COORDINATOR_TOKEN_ENV)
         if capability:
             redacted = redacted.replace(capability, "[REDACTED]")
+        redacted = redacted.replace(str(paths.activation_capability_path()), "[REDACTED]")
         return redacted
 
     def _redact_payload(self, value: Any) -> Any:
@@ -818,7 +911,13 @@ class TreeRingCli:
                 key: self._redact_payload(item)
                 for key, item in value.items()
                 if str(key).lower()
-                not in {"capability", "coordinator_token", "tree_ring_coordinator_token"}
+                not in {
+                    "capability",
+                    "coordinator_token",
+                    "tree_ring_coordinator_token",
+                    "tree_ring_agent_zero_plugin_manifest",
+                    "activation_capability_path",
+                }
             }
         return value
 

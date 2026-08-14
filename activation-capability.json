@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "kind": "tree-ring-agent-zero-plugin-capability",
+  "plugin_id": "tree_ring_memory",
+  "plugin_version": "3.1.0",
+  "activation_protocol_version": 1,
+  "tree_ring_version": {
+    "min": "0.14.0",
+    "minor": "0.14"
+  },
+  "enabled": true
+}

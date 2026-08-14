@@ -12,7 +12,7 @@
                 <header class="trm-settings-hero">
                     <div>
                         <div class="section-title">Tree Ring Memory</div>
-                        <div class="section-description">Configure the Agent Zero bridge to the Rust-native v0.13 CLI.</div>
+                        <div class="section-description">Configure the Agent Zero bridge for the pending Rust-native v0.14 CLI protocol.</div>
                     </div>
                     <button type="button" class="btn btn-field" @click="openModal('/plugins/tree_ring_memory/webui/main.html')">
                         <span class="material-symbols-outlined">account_tree</span>
@@ -37,7 +37,7 @@
                         <span class="material-symbols-outlined">terminal</span>
                         <div>
                             <strong>Runtime</strong>
-                            <span>These values control the executable boundary. The bridge accepts 0.13.x and fails closed on incompatible versions.</span>
+                            <span>These values control the executable boundary. The bridge accepts 0.14.x and fails closed on incompatible versions.</span>
                         </div>
                     </div>
 
@@ -112,6 +112,30 @@
                         </button>
                     </div>
                     <p class="trm-footnote">An unversioned v0.12 or versioned schema-v1/v2 store is never auto-opened. Stop every Tree Ring process first; the backup helper checkpoints WAL, creates a mode-0600 byte-for-byte backup, verifies its checksum and SQLite integrity, and requires a second explicit action before migration. Legacy Python-v1 validation remains dry-run; durable import is automatic only while the write policy is open.</p>
+                </section>
+
+                <section class="trm-settings-card">
+                    <div class="trm-card-heading">
+                        <span class="material-symbols-outlined">account_tree</span>
+                        <div>
+                            <strong>Project activation</strong>
+                            <span>Use a mounted project-local store only with the matching Tree Ring v0.14 release artifacts.</span>
+                        </div>
+                    </div>
+
+                    <label class="trm-path-field">
+                        <span>Mounted project root</span>
+                        <input type="text" x-model="config.activation.project_root" placeholder="/a0/usr/workdir/my-project" spellcheck="false" />
+                    </label>
+
+                    <p class="trm-footnote">Mount the project directory read/write into Agent Zero at this exact in-runtime path; this plugin never creates a mount. Set <strong>Memory root</strong> above to <code>&lt;mounted project root&gt;/.tree-ring</code> and save settings. With the matching released core and plugin, bootstrap runs core <code>tree-ring init</code> from that mounted project through the installed plugin capability. Core creates the project binding; do not hand-write it or configure a capability path. The persisted binding remains passive, while this installed runtime can report <code>configured-awaiting-proof</code>. In a new Agent Zero session, choose its writer context and run preflight; a fresh matching receipt then reports <code>active</code> after refresh.</p>
+
+                    <div class="trm-action-row">
+                        <button type="button" class="btn btn-field" @click="$store.treeRingMemory.preflight()" :disabled="!$store.treeRingMemory.hasWriterContext() || $store.treeRingMemory.activationBusy">
+                            <span x-text="$store.treeRingMemory.activationBusy ? 'Running project preflight…' : 'Run project preflight'"></span>
+                        </button>
+                    </div>
+                    <p class="trm-footnote">This pending 3.1.0 branch has no compatible bundled binary yet. Do not publish, install, or claim live activation from it until the immutable Tree Ring <code>v0.14.0</code> tag and matching Linux artifacts are released.</p>
                 </section>
 
                 <section class="trm-settings-card">

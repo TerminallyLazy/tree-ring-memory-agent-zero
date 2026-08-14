@@ -25,7 +25,7 @@ class Remember(Tool):
         unsupported = [key for key, value in kwargs.items() if value not in (None, "", [], {})]
         if unsupported:
             return tool_error(
-                "tree-ring 0.13 remember does not accept: "
+                "tree-ring 0.14 remember does not accept: "
                 + ", ".join(sorted(unsupported))
                 + ". Use the evidence tool for evaluated details."
             )

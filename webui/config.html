@@ -26,6 +26,8 @@
                         <strong x-text="$store.treeRingMemory.status.ok ? `Ready · tree-ring ${$store.treeRingMemory.status.version}` : 'CLI setup required'"></strong>
                         <span x-text="$store.treeRingMemory.status.ok ? $store.treeRingMemory.status.binary : ($store.treeRingMemory.status.error || 'No compatible binary was found.')"></span>
                         <span x-show="$store.treeRingMemory.status.legacy_migration_pending">The Python-v1 database is preserved and awaits an explicit migration.</span>
+                        <span x-text="$store.treeRingMemory.activationLabel()"></span>
+                        <span x-show="$store.treeRingMemory.status.activation?.next_step" x-text="$store.treeRingMemory.status.activation ? $store.treeRingMemory.status.activation.next_step : ''"></span>
                     </div>
                     <button type="button" class="btn btn-field" @click="$store.treeRingMemory.refreshStatus()">Refresh</button>
                 </section>

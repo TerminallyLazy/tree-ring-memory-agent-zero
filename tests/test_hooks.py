@@ -14,6 +14,13 @@ def config(root: Path) -> dict:
     }
 
 
+def project_binding_config(project_root: Path) -> dict:
+    return {
+        **config(project_root.parent / "default-memory"),
+        "activation": {"project_root": str(project_root)},
+    }
+
+
 def test_bootstrap_initializes_migrates_and_audits(tmp_path, monkeypatch):
     events: list[str] = []
     statuses = [
@@ -128,3 +135,41 @@ def test_bootstrap_reports_v2_upgrade_without_opening_store(tmp_path, monkeypatc
     assert report["ready"] is False
     assert report["upgrade_required"] is True
     assert calls == ["status"]
+
+
+def test_explicit_missing_project_binding_does_not_bootstrap_default_store(
+    tmp_path, monkeypatch
+):
+    class Bridge:
+        def __init__(self):
+            self.calls: list[str] = []
+
+        def status(self):
+            self.calls.append("status")
+            return {"ok": True, "initialized": False}
+
+        def init(self):
+            self.calls.append("init")
+            raise AssertionError("an explicit broken binding must not initialize a store")
+
+    bridge = Bridge()
+    monkeypatch.setattr(
+        hooks.paths,
+        "ensure_memory_dirs",
+        lambda resolved: (_ for _ in ()).throw(
+            AssertionError("an explicit broken binding must not create directories")
+        ),
+    )
+    monkeypatch.setattr(hooks, "TreeRingCli", lambda resolved: bridge)
+
+    report = hooks.bootstrap_runtime(project_binding_config(tmp_path / "missing"))
+
+    assert report["ok"] is True
+    assert report["ready"] is False
+    assert report["activation"] == {
+        "state": "needs-project-mount",
+        "receipt_age_seconds": None,
+        "next_step": "Configure activation.project_root to the mounted project root.",
+    }
+    assert bridge.calls == ["status"]
+    assert not (tmp_path / "default-memory").exists()

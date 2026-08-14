@@ -78,12 +78,8 @@ class MemoryApi(ApiHandler):
                 if status.binding is None or status.state != "configured-awaiting-proof":
                     return envelope(_binding_status_payload(status))
                 cli_status = bridge.activation_status(status.binding)
-                data = _binding_status_payload(status)
-                data["binding_state"] = data.pop("state")
-                data.update(
-                    {key: value for key, value in cli_status.items() if key != "next_step"}
-                )
-                data["next_step"] = cli_status.get("next_step") or status.next_step
+                data = _redacted_activation_payload(status, cli_status)
+                data["binding_state"] = status.state
                 return envelope(data)
             if action == "preflight":
                 status = load_activation_binding(config)
@@ -91,8 +87,23 @@ class MemoryApi(ApiHandler):
                     return envelope(_binding_status_payload(status))
                 return envelope(bridge.preflight_activation(status.binding))
             if action == "status":
-                status = bridge.status()
-                return envelope(status, ok=bool(status.get("ok")), error=status.get("error"))
+                status = dict(bridge.status())
+                binding_status = load_activation_binding(config)
+                cli_status = None
+                if (
+                    binding_status.binding is not None
+                    and binding_status.state == "configured-awaiting-proof"
+                ):
+                    try:
+                        cli_status = bridge.activation_status(binding_status.binding)
+                    except (TreeRingCliError, OSError, ValueError):
+                        cli_status = None
+                status["activation"] = _redacted_activation_payload(
+                    binding_status, cli_status
+                )
+                return envelope(
+                    status, ok=bool(status.get("ok")), error=status.get("error")
+                )
             if action == "policy_status":
                 return envelope(bridge.policy_status())
             if action == "policy_audit":
@@ -388,6 +399,31 @@ def _binding_status_payload(status: ActivationBindingStatus) -> dict[str, Any]:
         data["store_id"] = status.store_id
     if status.error:
         data["error"] = status.error
+    return data
+
+
+def _redacted_activation_payload(
+    status: ActivationBindingStatus, cli_status: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    state = status.state
+    next_step = status.next_step
+    receipt_age_seconds = None
+    if isinstance(cli_status, dict):
+        if isinstance(cli_status.get("state"), str) and cli_status["state"].strip():
+            state = cli_status["state"].strip()
+        if isinstance(cli_status.get("next_step"), str) and cli_status["next_step"].strip():
+            next_step = cli_status["next_step"].strip()
+        age = cli_status.get("receipt_age_seconds")
+        if isinstance(age, (int, float)) and not isinstance(age, bool) and age >= 0:
+            receipt_age_seconds = age
+
+    data: dict[str, Any] = {
+        "state": state,
+        "receipt_age_seconds": receipt_age_seconds,
+        "next_step": next_step,
+    }
+    if status.store_id:
+        data["store_id"] = status.store_id
     return data
 
 

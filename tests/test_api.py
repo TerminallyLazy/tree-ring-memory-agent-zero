@@ -30,7 +30,10 @@ class FakeBridge:
         self.calls.append(("activation_status", {}))
         return {
             "state": "needs-project-mount",
+            "receipt_age_seconds": 9,
             "next_step": "Mount the canonical project store.",
+            "receipt": {"content": "must-not-leak"},
+            "coordinator_capability": "must-not-leak",
         }
 
     def preflight_activation(self, binding):
@@ -56,6 +59,39 @@ def test_status_preserves_readiness_details_when_cli_is_missing(monkeypatch):
     assert result["ok"] is False
     assert result["data"]["required_version"] == "0.13.0"
     assert result["error"] == "missing cli"
+
+
+def test_status_adds_only_redacted_server_activation_fields(monkeypatch):
+    handler, fake = handler_with_fake(monkeypatch)
+    binding = object()
+    monkeypatch.setattr(
+        memory_api,
+        "load_activation_binding",
+        lambda config: SimpleNamespace(
+            state="configured-awaiting-proof",
+            binding=binding,
+            store_id="store-fixture",
+            next_step="Run Tree Ring preflight in a new Agent Zero session.",
+            error=None,
+        ),
+    )
+    fake.activation_status = lambda received: {
+        "state": "active",
+        "store_id": "untrusted-core-store",
+        "receipt_age_seconds": 7,
+        "next_step": "Continue with the current project task.",
+        "receipt": {"recalled_summaries": ["must stay server-side"]},
+        "coordinator_capability": "must-not-leak",
+    }
+
+    result = asyncio.run(handler.process({"action": "status"}, None))
+
+    assert result["data"]["activation"] == {
+        "state": "active",
+        "store_id": "store-fixture",
+        "receipt_age_seconds": 7,
+        "next_step": "Continue with the current project task.",
+    }
 
 
 def test_remember_rejects_python_only_fields(monkeypatch):
@@ -169,6 +205,9 @@ def test_activation_status_is_read_only_and_returns_one_next_step(monkeypatch):
     assert result["data"]["state"] == "needs-project-mount"
     assert result["data"]["next_step"]
     assert list(result["data"]).count("next_step") == 1
+    assert result["data"]["receipt_age_seconds"] == 9
+    assert "receipt" not in result["data"]
+    assert "coordinator_capability" not in result["data"]
     assert fake.calls == [("activation_status", {})]
 
 

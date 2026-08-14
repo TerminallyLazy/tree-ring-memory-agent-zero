@@ -6,7 +6,11 @@ from threading import Lock
 from typing import Any
 
 from usr.plugins.tree_ring_memory.helpers import paths
-from usr.plugins.tree_ring_memory.helpers.cli import TreeRingCli
+from usr.plugins.tree_ring_memory.helpers.activation import (
+    ActivationBindingStatus,
+    load_activation_binding,
+)
+from usr.plugins.tree_ring_memory.helpers.cli import TreeRingCli, TreeRingCliError
 from usr.plugins.tree_ring_memory.helpers.config import DEFAULT_CONFIG, load_config
 from usr.plugins.tree_ring_memory.helpers.legacy import LegacyMigrator
 
@@ -19,6 +23,19 @@ def bootstrap_runtime(config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Prepare a compatible store without crossing the offline upgrade gate."""
 
     resolved = load_config(config)
+    activation_status = load_activation_binding(resolved)
+    if _has_explicit_activation_selection(resolved) and not _is_shared_binding(
+        activation_status
+    ):
+        bridge = TreeRingCli(resolved)
+        initial_status = bridge.status()
+        return {
+            "ok": True,
+            "ready": False,
+            "activation": _activation_payload(activation_status),
+            "status": initial_status,
+        }
+
     paths.ensure_memory_dirs(resolved)
     bridge = TreeRingCli(resolved)
     initial_status = bridge.status()
@@ -27,6 +44,7 @@ def bootstrap_runtime(config: dict[str, Any] | None = None) -> dict[str, Any]:
             "ok": True,
             "ready": False,
             "upgrade_required": True,
+            "activation": _activation_payload(activation_status),
             "status": initial_status,
             "message": (
                 "The existing Tree Ring store was not opened. Stop every Tree Ring process, "
@@ -59,8 +77,56 @@ def bootstrap_runtime(config: dict[str, Any] | None = None) -> dict[str, Any]:
         "init": init_result,
         "migration": migration,
         "audit": audit,
+        "activation": _activation_payload(activation_status, bridge),
         "status": final_status,
     }
+
+
+def _has_explicit_activation_selection(config: dict[str, Any]) -> bool:
+    activation = config.get("activation")
+    if not isinstance(activation, dict):
+        return False
+    return bool(
+        activation.get("project_root")
+        or activation.get("_project_root_error")
+        or activation.get("_scope_conflict")
+    )
+
+
+def _is_shared_binding(status: ActivationBindingStatus) -> bool:
+    return status.state == "configured-awaiting-proof" and status.binding is not None
+
+
+def _activation_payload(
+    status: ActivationBindingStatus, bridge: TreeRingCli | None = None
+) -> dict[str, Any]:
+    core_status = None
+    if bridge is not None and _is_shared_binding(status):
+        try:
+            core_status = bridge.activation_status(status.binding)
+        except (TreeRingCliError, OSError, ValueError):
+            core_status = None
+
+    state = status.state
+    next_step = status.next_step
+    receipt_age_seconds = None
+    if isinstance(core_status, dict):
+        if isinstance(core_status.get("state"), str) and core_status["state"].strip():
+            state = core_status["state"].strip()
+        if isinstance(core_status.get("next_step"), str) and core_status["next_step"].strip():
+            next_step = core_status["next_step"].strip()
+        age = core_status.get("receipt_age_seconds")
+        if isinstance(age, (int, float)) and not isinstance(age, bool) and age >= 0:
+            receipt_age_seconds = age
+
+    payload: dict[str, Any] = {
+        "state": state,
+        "receipt_age_seconds": receipt_age_seconds,
+        "next_step": next_step,
+    }
+    if status.store_id:
+        payload["store_id"] = status.store_id
+    return payload
 
 
 def _ensure_auto_bootstrap(config: dict[str, Any]) -> dict[str, Any] | None:

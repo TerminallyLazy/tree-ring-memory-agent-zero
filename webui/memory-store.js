@@ -112,7 +112,15 @@ export const store = createStore("treeRingMemory", {
     results: [],
     selected: null,
     stats: { counts: {} },
-    status: { ok: false, required_version: "0.13.0" },
+    status: {
+        ok: false,
+        required_version: "0.13.0",
+        activation: {
+            state: "unknown",
+            receipt_age_seconds: null,
+            next_step: "Refresh status to check project activation.",
+        },
+    },
     policy: { mode: "unknown", coordinator_label: null },
     policyAudit: [],
     searchBusy: false,
@@ -385,6 +393,13 @@ export const store = createStore("treeRingMemory", {
         const mode = String(this.policy?.mode || "unknown");
         const coordinator = this.policy?.coordinator_label;
         return coordinator ? `${mode} · ${coordinator}` : mode;
+    },
+
+    activationLabel() {
+        const state = String(this.status?.activation?.state || "unknown")
+            .trim()
+            .replaceAll("-", " ");
+        return `Project activation: ${state || "unknown"}`;
     },
 
     async remember(summary) {

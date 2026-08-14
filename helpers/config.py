@@ -22,6 +22,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "root": DEFAULT_MEMORY_ROOT,
         "legacy_sqlite_path": f"{DEFAULT_MEMORY_ROOT}/indexes/memory.sqlite",
     },
+    "activation": {
+        "enabled": True,
+        "protocol_version": 1,
+        "project_root": None,
+    },
     "scope": {
         "default_project_scope": "current_project",
         "allow_global": True,
@@ -65,6 +70,10 @@ def load_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
     supplied = copy.deepcopy(_read_local_config() if config is None else config)
     loaded = merge(DEFAULT_CONFIG, supplied)
     supplied_storage = supplied.get("storage") if isinstance(supplied.get("storage"), dict) else {}
+    supplied_activation = (
+        supplied.get("activation") if isinstance(supplied.get("activation"), dict) else {}
+    )
+    supplied_scope = supplied.get("scope") if isinstance(supplied.get("scope"), dict) else {}
     storage = loaded.setdefault("storage", {})
 
     env_root = os.environ.get("TREE_RING_MEMORY_ROOT") or os.environ.get("TREE_RING_MEMORY_DATA_DIR")
@@ -116,10 +125,18 @@ def load_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
         if str(profile).strip()
     ]
 
-    if os.environ.get("TREE_RING_MEMORY_PROJECT_ROOT"):
-        loaded.setdefault("scope", {})["allowed_project_root"] = os.environ[
-            "TREE_RING_MEMORY_PROJECT_ROOT"
-        ]
+    activation = loaded.setdefault("activation", {})
+    env_project_root = os.environ.get("TREE_RING_MEMORY_PROJECT_ROOT")
+    configured_project_root = supplied_activation.get("project_root")
+    compatibility_project_root = supplied_scope.get("allowed_project_root")
+    selected_project_root = (
+        env_project_root or configured_project_root or compatibility_project_root or None
+    )
+    activation["project_root"] = (
+        str(Path(str(selected_project_root)).expanduser()) if selected_project_root else None
+    )
+    if env_project_root:
+        loaded.setdefault("scope", {})["allowed_project_root"] = env_project_root
     return loaded
 
 

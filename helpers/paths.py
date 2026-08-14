@@ -22,6 +22,16 @@ def memory_root(config: dict[str, Any] | None = None) -> Path:
     return Path(str(env_root or configured or DEFAULT_MEMORY_ROOT)).expanduser()
 
 
+def activation_project_root(config: dict[str, Any] | None = None) -> Path | None:
+    configured = ((config or {}).get("activation") or {}).get("project_root")
+    return Path(str(configured)).expanduser().resolve() if configured else None
+
+
+def activation_manifest_path(config: dict[str, Any] | None = None) -> Path | None:
+    project_root = activation_project_root(config)
+    return (project_root / ".tree-ring" / "activation.json").resolve() if project_root else None
+
+
 def canonical_sqlite_path(config: dict[str, Any] | None = None) -> Path:
     return memory_root(config) / "memory.sqlite"
 

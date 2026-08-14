@@ -60,3 +60,39 @@ def test_output_and_project_paths_fail_closed(tmp_path):
         paths.safe_output_path(config, str(tmp_path / "outside.jsonl"), "unused.jsonl")
     with pytest.raises(ValueError, match="Unsafe path"):
         paths.safe_project_root(config, str(tmp_path / "outside"))
+
+
+def test_activation_project_root_precedence(tmp_path, monkeypatch):
+    environment = tmp_path / "environment"
+    configured = tmp_path / "configured"
+    legacy_scope = tmp_path / "legacy-scope"
+    monkeypatch.setenv("TREE_RING_MEMORY_PROJECT_ROOT", str(environment))
+
+    config = load_config(
+        {
+            "activation": {"project_root": str(configured)},
+            "scope": {"allowed_project_root": str(legacy_scope)},
+        }
+    )
+
+    assert config["activation"]["project_root"] == str(environment)
+    assert paths.activation_project_root(config) == environment.resolve()
+
+
+def test_activation_project_root_uses_explicit_scope_compatibility_value(tmp_path):
+    legacy_scope = tmp_path / "legacy-scope"
+
+    config = load_config({"scope": {"allowed_project_root": str(legacy_scope)}})
+
+    assert config["activation"]["project_root"] == str(legacy_scope)
+    assert paths.activation_manifest_path(config) == (
+        legacy_scope / ".tree-ring/activation.json"
+    ).resolve()
+
+
+def test_activation_paths_have_no_repository_default():
+    config = load_config({})
+
+    assert config["activation"]["project_root"] is None
+    assert paths.activation_project_root(config) is None
+    assert paths.activation_manifest_path(config) is None

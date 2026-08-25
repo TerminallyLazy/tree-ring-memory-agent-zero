@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STAGER = ROOT / "scripts" / "stage-v014-bundled-binaries.sh"
+STAGER = ROOT / "scripts" / "stage-v0153-bundled-binaries.sh"
 BOOKWORM_IMAGE = (
     "rust:1.95-bookworm"
     "@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1"
@@ -23,7 +23,7 @@ def _artifact(
 ) -> Path:
     root.mkdir()
     binary = root / "tree-ring"
-    binary.write_text("#!/bin/sh\necho 'tree-ring 0.14.0'\n", encoding="utf-8")
+    binary.write_text("#!/bin/sh\necho 'tree-ring 0.15.3'\n", encoding="utf-8")
     binary.chmod(0o755)
     digest = hashlib.sha256(binary.read_bytes()).hexdigest()
     (root / "SHA256SUM").write_text(f"{digest}  tree-ring\n", encoding="utf-8")
@@ -31,7 +31,7 @@ def _artifact(
         "\n".join(
             (
                 "source_repository=https://github.com/TerminallyLazy/Tree-Ring-Memory",
-                "source_tag=v0.14.0",
+                "source_tag=v0.15.3",
                 f"source_commit={source_commit}",
                 f"build_image={BOOKWORM_IMAGE}",
                 f"runner={runner}",
@@ -40,7 +40,7 @@ def _artifact(
                 "cargo=cargo fixture",
                 "glibc=ldd fixture",
                 "maximum_required_glibc=GLIBC_2.36",
-                "binary_version=tree-ring 0.14.0",
+                "binary_version=tree-ring 0.15.3",
                 "",
             )
         ),
@@ -61,7 +61,7 @@ def _plugin_copy(tmp_path: Path) -> Path:
     return plugin
 
 
-def test_release_stager_requires_matched_verified_v014_artifacts(tmp_path):
+def test_release_stager_requires_matched_verified_v0153_artifacts(tmp_path):
     plugin = _plugin_copy(tmp_path)
     source_commit = "a" * 40
     x86 = _artifact(

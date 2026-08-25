@@ -61,7 +61,7 @@ class TreeRingCli:
 
     @property
     def required_version(self) -> str:
-        return str((self.config.get("cli") or {}).get("required_version") or "0.14.0")
+        return str((self.config.get("cli") or {}).get("required_version") or "0.15.3")
 
     @property
     def binary(self) -> Path:
@@ -950,7 +950,7 @@ class TreeRingCli:
             if resolved.is_file() and os.access(resolved, os.X_OK):
                 return resolved
         raise TreeRingCliError(
-            "tree-ring is not installed for this runtime. Configure cli.binary or place a v0.14.x "
+            "tree-ring is not installed for this runtime. Configure cli.binary or place a v0.15.x "
             "binary in the plugin bin directory."
         )
 

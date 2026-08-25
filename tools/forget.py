@@ -18,7 +18,7 @@ class Forget(Tool):
         **kwargs,
     ):
         if kwargs.get("query"):
-            return tool_error("tree-ring 0.14 requires an explicit memory_id for forget.")
+            return tool_error("tree-ring 0.15 requires an explicit memory_id for forget.")
         if not memory_id:
             return tool_error("memory_id is required")
         if not reason.strip():

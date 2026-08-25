@@ -70,7 +70,7 @@ def runner(command, **kwargs):
         "input": kwargs.get("input"),
     })
     if "--version" in command:
-        return subprocess.CompletedProcess(command, 0, "tree-ring 0.14.0\n", "")
+        return subprocess.CompletedProcess(command, 0, "tree-ring 0.15.3\n", "")
     if command[-1] == "init":
         return completed(command, {"ok": True})
     if "preflight" in command:
@@ -168,7 +168,7 @@ def publish_core_binding(root):
         "protocol_version": 1,
         "store_id": "store-fixture",
         "project_root_fingerprint": "a" * 64,
-        "cli_version": "0.14.0",
+        "cli_version": "0.15.3",
         "harnesses": {"agent-zero": {"state": "needs-plugin"}},
     }), encoding="utf-8")
     (activation / "agent-zero.json").write_text(json.dumps({

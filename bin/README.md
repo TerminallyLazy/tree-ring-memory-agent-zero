@@ -10,8 +10,10 @@ build image on each native target architecture.
 - `linux-aarch64/tree-ring` supports ARM64 Agent Zero Docker runtimes.
 - `linux-x86_64/tree-ring` supports x86-64 Agent Zero Docker runtimes.
 
-Both are built and tested on native GitHub runners by the manual **Prepare Tree
-Ring 0.15.3 bundled binaries** workflow. They are dynamically linked against
+Both were built and tested on native GitHub runners by the manual **Prepare Tree
+Ring 0.15.3 bundled binaries** [workflow run
+32910146887](https://github.com/TerminallyLazy/tree-ring-memory-agent-zero/actions/runs/32910146887).
+They are dynamically linked against
 the Debian Bookworm GLIBC 2.36 baseline, and the workflow rejects a binary that
 requires a newer GLIBC. The plugin selects only the binary matching the running
 Linux architecture and never downloads executable code during installation.

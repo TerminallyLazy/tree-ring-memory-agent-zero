@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-SUPPORTED_TREE_RING_VERSION = "0.14.0"
+SUPPORTED_TREE_RING_VERSION = "0.15.3"
 DEFAULT_MEMORY_ROOT = "/a0/usr/memory/tree_ring_memory"
 LOCAL_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.json"
 

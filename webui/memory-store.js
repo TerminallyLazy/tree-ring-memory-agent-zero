@@ -19,7 +19,7 @@ const settingsDefaults = {
     enabled: true,
     cli: {
         binary: "tree-ring",
-        required_version: "0.14.0",
+        required_version: "0.15.3",
         timeout_seconds: 30,
     },
     storage: {
@@ -120,7 +120,7 @@ export const store = createStore("treeRingMemory", {
     stats: { counts: {} },
     status: {
         ok: false,
-        required_version: "0.14.0",
+        required_version: "0.15.3",
         activation: {
             state: "unknown",
             receipt_age_seconds: null,
@@ -270,7 +270,7 @@ export const store = createStore("treeRingMemory", {
     },
 
     ringMeterStyle(ring) {
-        return `width: ${this.ringUsagePercent(ring)}%;`;
+        return `transform: scaleX(${this.ringUsagePercent(ring) / 100});`;
     },
 
     dominantRingLabel() {

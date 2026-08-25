@@ -136,7 +136,7 @@ class MemoryApi(ApiHandler):
                     return envelope(
                         ok=False,
                         error=(
-                            "tree-ring 0.14 remember does not accept: "
+                            "tree-ring 0.15 remember does not accept: "
                             + ", ".join(unsupported)
                             + ". Use the evidence action for evaluated details or store a concise summary."
                         ),
@@ -191,7 +191,7 @@ class MemoryApi(ApiHandler):
                 memory_id = str(input.get("memory_id") or "")
                 reason = str(input.get("reason") or "")
                 if not memory_id:
-                    return envelope(ok=False, error="memory_id is required; broad-query forget is not exposed by tree-ring 0.14")
+                    return envelope(ok=False, error="memory_id is required; broad-query forget is not exposed by tree-ring 0.15")
                 if not reason.strip():
                     return envelope(ok=False, error="reason is required")
                 return envelope(
@@ -231,9 +231,9 @@ class MemoryApi(ApiHandler):
                 )
             if action == "export":
                 if str(input.get("format") or "jsonl") != "jsonl":
-                    return envelope(ok=False, error="tree-ring 0.14 exports canonical JSONL only")
+                    return envelope(ok=False, error="tree-ring 0.15 exports canonical JSONL only")
                 if input.get("memory_ids"):
-                    return envelope(ok=False, error="tree-ring 0.14 does not expose selected-memory export")
+                    return envelope(ok=False, error="tree-ring 0.15 does not expose selected-memory export")
                 return envelope(
                     bridge.export_to_file(
                         output_path=_optional_text(input.get("output_path")),

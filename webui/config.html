@@ -12,7 +12,7 @@
                 <header class="trm-settings-hero">
                     <div>
                         <div class="section-title">Tree Ring Memory</div>
-                        <div class="section-description">Configure the Agent Zero bridge for the pending Rust-native v0.14 CLI protocol.</div>
+                        <div class="section-description">Configure the Agent Zero bridge for the released Rust-native v0.15 CLI protocol.</div>
                     </div>
                     <button type="button" class="btn btn-field" @click="openModal('/plugins/tree_ring_memory/webui/main.html')">
                         <span class="material-symbols-outlined">account_tree</span>
@@ -37,7 +37,7 @@
                         <span class="material-symbols-outlined">terminal</span>
                         <div>
                             <strong>Runtime</strong>
-                            <span>These values control the executable boundary. The bridge accepts 0.14.x and fails closed on incompatible versions.</span>
+                            <span>These values control the executable boundary. The bridge accepts 0.15.x and fails closed on incompatible versions.</span>
                         </div>
                     </div>
 
@@ -119,7 +119,7 @@
                         <span class="material-symbols-outlined">account_tree</span>
                         <div>
                             <strong>Project activation</strong>
-                            <span>Use a mounted project-local store only with the matching Tree Ring v0.14 release artifacts.</span>
+                            <span>Use a mounted project-local store only with the matching Tree Ring v0.15 release artifacts.</span>
                         </div>
                     </div>
 
@@ -135,7 +135,7 @@
                             <span x-text="$store.treeRingMemory.activationBusy ? 'Running project preflight…' : 'Run project preflight'"></span>
                         </button>
                     </div>
-                    <p class="trm-footnote">This pending 3.1.0 branch has no compatible bundled binary yet. Do not publish, install, or claim live activation from it until the immutable Tree Ring <code>v0.14.0</code> tag and matching Linux artifacts are released.</p>
+                    <p class="trm-footnote">Plugin 3.2.0 bundles Tree Ring <code>v0.15.3</code> for supported Linux architectures. Installation is not activation proof; only a fresh matching preflight receipt can report <code>active</code>.</p>
                 </section>
 
                 <section class="trm-settings-card">

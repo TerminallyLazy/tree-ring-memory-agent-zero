@@ -409,11 +409,12 @@ def _redacted_activation_payload(
     next_step = status.next_step
     receipt_age_seconds = None
     if isinstance(cli_status, dict):
-        if isinstance(cli_status.get("state"), str) and cli_status["state"].strip():
-            state = cli_status["state"].strip()
-        if isinstance(cli_status.get("next_step"), str) and cli_status["next_step"].strip():
-            next_step = cli_status["next_step"].strip()
-        age = cli_status.get("receipt_age_seconds")
+        activation = _agent_zero_activation_status(cli_status)
+        if isinstance(activation.get("state"), str) and activation["state"].strip():
+            state = activation["state"].strip()
+        if isinstance(activation.get("next_step"), str) and activation["next_step"].strip():
+            next_step = activation["next_step"].strip()
+        age = activation.get("receipt_age_seconds")
         if isinstance(age, (int, float)) and not isinstance(age, bool) and age >= 0:
             receipt_age_seconds = age
 
@@ -425,6 +426,15 @@ def _redacted_activation_payload(
     if status.store_id:
         data["store_id"] = status.store_id
     return data
+
+
+def _agent_zero_activation_status(cli_status: dict[str, Any]) -> dict[str, Any]:
+    integrations = cli_status.get("integrations")
+    if isinstance(integrations, list):
+        for integration in integrations:
+            if isinstance(integration, dict) and integration.get("id") == "agent-zero":
+                return integration
+    return cli_status
 
 
 def _preflight_caller_fields(value: Any) -> list[str]:

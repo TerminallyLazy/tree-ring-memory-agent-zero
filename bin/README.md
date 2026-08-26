@@ -2,7 +2,7 @@
 
 Plugin `3.3.1` requires Tree Ring `0.15.4` through `0.15.x`. These executables
 are built from immutable Tree Ring Memory tag `v0.15.4`, commit
-`33e42915585fba4e434ac0c35ea1dbb62d96c9b9`, using the locked dependency graph
+`8fba7f31cd2036864e31dc3183d0ae220ef5d48b`, using the locked dependency graph
 and pinned
 `rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1`
 build image on each native target architecture.
@@ -12,7 +12,7 @@ build image on each native target architecture.
 
 Both were built and tested on native GitHub runners by the manual **Prepare Tree
 Ring 0.15.4 bundled binaries** [workflow run
-32910146887](https://github.com/TerminallyLazy/tree-ring-memory-agent-zero/actions/runs/32910146887).
+33021960944](https://github.com/TerminallyLazy/tree-ring-memory-agent-zero/actions/runs/33021960944).
 They are dynamically linked against
 the Debian Bookworm GLIBC 2.36 baseline, and the workflow rejects a binary that
 requires a newer GLIBC. The plugin selects only the binary matching the running

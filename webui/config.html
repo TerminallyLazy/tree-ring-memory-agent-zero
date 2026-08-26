@@ -119,23 +119,24 @@
                         <span class="material-symbols-outlined">account_tree</span>
                         <div>
                             <strong>Project activation</strong>
-                            <span>Use a mounted project-local store only with the matching Tree Ring v0.15 release artifacts.</span>
+                            <span>Tree Ring uses the selected Agent Zero project and keeps its memory inside that project.</span>
                         </div>
                     </div>
 
-                    <label class="trm-path-field">
-                        <span>Mounted project root</span>
-                        <input type="text" x-model="config.activation.project_root" placeholder="/a0/usr/workdir/my-project" spellcheck="false" />
-                    </label>
-
-                    <p class="trm-footnote">Mount the project directory read/write into Agent Zero at this exact in-runtime path; this plugin never creates a mount. Set <strong>Memory root</strong> above to <code>&lt;mounted project root&gt;/.tree-ring</code> and save settings. With the matching released core and plugin, bootstrap runs core <code>tree-ring init</code> from that mounted project through the installed plugin capability. Core creates the project binding; do not hand-write it or configure a capability path. The persisted binding remains passive, while this installed runtime can report <code>configured-awaiting-proof</code>. In a new Agent Zero session, choose its writer context and run preflight; a fresh matching receipt then reports <code>active</code> after refresh.</p>
+                    <div class="trm-project-choice" :class="{ 'is-ready': Boolean(context.projectName) }">
+                        <span class="material-symbols-outlined" x-text="context.projectName ? 'folder_managed' : 'folder_off'"></span>
+                        <div>
+                            <strong x-text="context.projectName ? context.projectLabel(context.projectName) : 'Select a project above'"></strong>
+                            <span x-text="$store.treeRingMemory.activationProjectSummary(context)"></span>
+                        </div>
+                    </div>
 
                     <div class="trm-action-row">
-                        <button type="button" class="btn btn-field" @click="$store.treeRingMemory.preflight()" :disabled="!$store.treeRingMemory.hasWriterContext() || $store.treeRingMemory.activationBusy">
-                            <span x-text="$store.treeRingMemory.activationBusy ? 'Running project preflight…' : 'Run project preflight'"></span>
+                        <button type="button" class="btn btn-ok" @click="$store.treeRingMemory.activateProject(config, context)" :disabled="!context.projectName || $store.treeRingMemory.activationBusy || context.isSaving">
+                            <span x-text="$store.treeRingMemory.activationBusy ? 'Activating project…' : 'Activate this project'"></span>
                         </button>
                     </div>
-                    <p class="trm-footnote">Plugin 3.2.0 bundles Tree Ring <code>v0.15.3</code> for supported Linux architectures. Installation is not activation proof; only a fresh matching preflight receipt can report <code>active</code>.</p>
+                    <p class="trm-footnote">This sets the project and memory roots together, saves the project-scoped plugin configuration, initializes the project binding, and uses a matching project chat for receipt-backed preflight when one is available. No path editing is required.</p>
                 </section>
 
                 <section class="trm-settings-card">
@@ -169,10 +170,11 @@
                         <span>Writer context for protected actions</span>
                         <select
                             x-model="$store.treeRingMemory.writerContextId"
+                            @change="$store.treeRingMemory.selectWriterContext($event.target.value)"
                             aria-label="Tree Ring writer context"
                         >
                             <option value="" disabled>No chat context available</option>
-                            <template x-for="writerContext in $store.treeRingMemory.writerContexts()" :key="writerContext.id">
+                            <template x-for="writerContext in $store.treeRingMemory.writerContexts(context.projectName)" :key="writerContext.id">
                                 <option :value="writerContext.id" x-text="$store.treeRingMemory.writerContextLabel(writerContext)"></option>
                             </template>
                         </select>
@@ -320,6 +322,36 @@
             flex-wrap: wrap;
             gap: 8px;
             margin-top: 14px;
+        }
+
+        .trm-project-choice {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+            padding: 12px;
+            border: 1px solid color-mix(in srgb, var(--trm-warn) 55%, var(--color-border));
+            border-radius: 7px;
+            background: color-mix(in srgb, var(--trm-warn) 7%, transparent);
+        }
+
+        .trm-project-choice.is-ready {
+            border-color: color-mix(in srgb, var(--trm-ready) 55%, var(--color-border));
+            background: color-mix(in srgb, var(--trm-ready) 7%, transparent);
+        }
+
+        .trm-project-choice > div {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            min-width: 0;
+        }
+
+        .trm-project-choice span:not(.material-symbols-outlined) {
+            color: var(--color-text-secondary);
+            font-size: 12px;
+            overflow-wrap: anywhere;
         }
 
         .trm-footnote {

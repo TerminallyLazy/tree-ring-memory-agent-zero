@@ -37,6 +37,8 @@ def test_webui_forwards_context_and_exposes_only_safe_policy_reads():
     assert "context_id: contextId" in store
     assert "writerContextId" in store
     assert "writerContexts" in store
+    assert "selectWriterContext" in store
+    assert "sessionStorage" in store
     assert "Choose a writer context or start a chat" in store
     assert 'aria-label="Tree Ring writer context"' in html
     assert 'aria-label="Tree Ring writer context"' in config
@@ -47,6 +49,35 @@ def test_webui_forwards_context_and_exposes_only_safe_policy_reads():
     assert "coordinator capability" not in html.lower()
     assert "one-time coordinator capability" in config.lower()
     assert "never exposed here" in config.lower()
+
+
+def test_writer_context_labels_are_compact_and_explicit_selection_is_retained():
+    html = (ROOT / "webui" / "main.html").read_text(encoding="utf-8")
+    config = (ROOT / "webui" / "config.html").read_text(encoding="utf-8")
+    store = (ROOT / "webui" / "memory-store.js").read_text(encoding="utf-8")
+
+    assert "context.name || context.task_name" not in store
+    assert "Chat #" in store
+    assert "@change=\"$store.treeRingMemory.selectWriterContext($event.target.value)\"" in html
+    assert "@change=\"$store.treeRingMemory.selectWriterContext($event.target.value)\"" in config
+    assert "savedWriterContextId" in store
+    assert "[this.writerContextId, savedWriterContextId(), activeContextId()]" in store
+
+
+def test_project_activation_uses_the_selected_agent_zero_project_scope():
+    config = (ROOT / "webui" / "config.html").read_text(encoding="utf-8")
+    store = (ROOT / "webui" / "memory-store.js").read_text(encoding="utf-8")
+
+    assert "Activate this project" in config
+    assert "context.projectName" in config
+    assert "activateProject(config, context)" in config
+    assert "Mounted project root" not in config
+    assert 'x-model="config.activation.project_root"' not in config
+    assert "configureProjectActivation" in store
+    assert 'const projectRoot = `/a0/usr/projects/${projectName}`' in store
+    assert 'config.storage.root = `${projectRoot}/.tree-ring`' in store
+    assert "config.scope.allowed_project_root = projectRoot" in store
+    assert "await settingsContext.save()" in store
 
 
 def test_settings_hydrate_partial_legacy_config_before_alpine_binds_fields():
@@ -81,7 +112,8 @@ def test_webui_renders_only_server_provided_activation_status():
     assert 'x-text="$store.treeRingMemory.activationLabel()"' in main
     assert 'x-text="$store.treeRingMemory.activationLabel()"' in config
     assert "TREE_RING_MEMORY_PROJECT_ROOT" not in store
-    assert "config.activation.project_root" in config
+    assert "config.activation.project_root" not in config
+    assert "config.activation.project_root = projectRoot" in store
     assert 'post("preflight")' in store
     assert "TREE_RING_AGENT_ZERO_PLUGIN_MANIFEST" not in main + config + store
     assert "activation-capability.json" not in main + config + store

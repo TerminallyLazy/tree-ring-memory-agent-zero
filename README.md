@@ -1,6 +1,6 @@
 # Tree Ring Memory for Agent Zero
 
-Plugin `3.2.0` targets the released Tree Ring `0.15` activation protocol and
+Plugin `3.3.0` targets the released Tree Ring `0.15` activation protocol and
 requires Tree Ring `0.15.3` or a newer `0.15.x` patch. The published plugin
 bundles verified `0.15.3` Linux executables for Agent Zero's x86-64 and ARM64
 Docker runtimes.
@@ -12,7 +12,7 @@ The Rust CLI owns validation, sensitivity classification, SQLite/FTS storage, re
 
 ## Release and update boundary
 
-- Plugin `3.2.0` supports `tree-ring` `0.15.3` through `0.15.x` and fails closed
+- Plugin `3.3.0` supports `tree-ring` `0.15.3` through `0.15.x` and fails closed
   on older or different-minor executables.
 - The checked-in `bin/` executables, provenance, and checksums are built from
   immutable core tag `v0.15.3` on native Linux runners in the pinned Debian
@@ -38,6 +38,11 @@ configured Rust-owned store. Existing memory under
 An unversioned v0.12 or versioned schema-v1/v2 Rust store waits for the explicit
 offline schema-v3 workflow below.
 
+A fresh install without a selected Agent Zero project waits for project
+activation and does not initialize the legacy global memory root. Selecting a
+project and choosing **Activate this project** creates or opens only that
+project's `.tree-ring` store.
+
 ## Requirements
 
 - Agent Zero with this directory mounted at `/a0/usr/plugins/tree_ring_memory/`.
@@ -60,16 +65,12 @@ replacement binary remains an explicit operator action.
 
 ## Project activation protocol
 
-Project activation is a proof flow, not a marker-file claim. The user configures
-only two matching in-runtime paths:
-
-1. Mount the project read/write into Agent Zero and set
-   `activation.project_root` to that mounted project directory.
-2. Set `storage.root` to exactly
-   `<activation.project_root>/.tree-ring` and save the plugin settings.
-
-When those paths are canonical and reachable, the plugin bootstrap invokes the
-existing core command from the mounted project:
+Project activation is a proof flow, not a marker-file claim. Mount the project
+read/write at Agent Zero's standard `/a0/usr/projects/<project>` path, choose
+that project in **Plugin Settings**, and select **Activate this project**. The
+plugin derives `activation.project_root` and the matching project-local
+`storage.root`, saves the project-scoped configuration, and immediately runs
+the existing core bootstrap command from the mounted project:
 
 ```text
 tree-ring init --root .tree-ring --json
@@ -84,9 +85,16 @@ manifest; the plugin never writes the project binding itself.
 Core creation-publishes an Agent Zero binding whose persisted state remains
 `needs-plugin`, even while the installed plugin is present. Descriptor-scoped
 runtime status may derive `configured-awaiting-proof` without changing that
-passive record. In a new Agent Zero session, choose a writer context and run
-the `preflight` tool. Only its server-derived identity and a fresh matching
-project-local receipt can make runtime status `active`.
+passive record. When the selected project has a matching chat or task, the
+activation action also runs preflight with that session-specific identity. If
+no matching context exists yet, start or open a project chat to produce the
+fresh project-local receipt that can make runtime status `active`.
+
+The writer-context selector remains session-specific because attribution,
+idempotency, coordinated writes, and activation receipts require a real chat or
+task identity. The UI filters choices to the active project, displays compact
+task/chat labels, and preserves the explicit selection across panel reopen and
+page reload for the current browser session.
 
 If the plugin is removed, a host CLI runs without the descriptor, or a second
 agent points at a different store, status remains `needs-plugin` or
@@ -126,7 +134,7 @@ The `0.15` bridge never auto-opens an existing unversioned v0.12 or versioned
 schema-v1/v2 store. The dashboard and settings report `upgrade_required` while
 normal store operations remain blocked. The `pre-v0.13` wording in backup
 filenames and markers is historical schema provenance, not a claim that a
-v0.13 runtime is supported by plugin `3.2.0`.
+v0.13 runtime is supported by plugin `3.3.0`.
 
 Treat the upgrade as an offline, one-way operation:
 
@@ -191,9 +199,7 @@ Python-v1 surfaces.
 
 ## Web UI
 
-![Tree Ring Memory dashboard](screenshots/tree-ring-memory-dashboard.png)
-
-The panel provides runtime/schema readiness, project activation status,
+The panel provides runtime/schema readiness, one-action project activation,
 write-policy status, search, ring/event filters, memory detail, ring-derived
 copies, delete/redact, consolidation, safe DOX/Revolve previews, memory and
 policy audit, and canonical JSONL export. Its concentric Tree Ring visual
@@ -202,7 +208,7 @@ shows exact record counts and share of the store; selecting a ring filters the
 live results. A visible writer-context selector attributes protected actions to
 an existing Agent Zero chat or task without weakening the server-side identity
 gate. The settings view owns the explicit two-step schema upgrade, the
-non-secret coordinator-profile allowlist, the mounted-project configuration,
+non-secret coordinator-profile allowlist, the selected-project configuration,
 and compatibility hydration for partial configuration saved by older releases.
 
 When the CLI is missing or incompatible, the panel stays available and shows the concrete readiness error instead of initializing a second store.

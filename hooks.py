@@ -25,6 +25,19 @@ def bootstrap_runtime(config: dict[str, Any] | None = None) -> dict[str, Any]:
     resolved = load_config(config)
     activation_status = load_activation_binding(resolved)
     bridge: TreeRingCli | None = None
+    activation = resolved.get("activation")
+    activation_enabled = (
+        not isinstance(activation, dict) or activation.get("enabled") is not False
+    )
+    if activation_enabled and not _has_explicit_activation_selection(resolved):
+        bridge = TreeRingCli(resolved)
+        return {
+            "ok": True,
+            "ready": False,
+            "activation": _activation_payload(activation_status),
+            "status": bridge.status(),
+            "message": "Choose an Agent Zero project to activate Tree Ring Memory.",
+        }
     if _has_explicit_activation_selection(resolved) and not _is_shared_binding(
         activation_status
     ):
@@ -260,5 +273,19 @@ def get_default_plugin_config(default=None, **kwargs):
 def get_plugin_config(default=None, **kwargs):
     del kwargs
     config = load_config(default if isinstance(default, dict) else None)
+    _ensure_auto_bootstrap(config)
+    return config
+
+
+def save_plugin_config(settings=None, **kwargs):
+    """Normalize and apply a saved project configuration immediately.
+
+    Agent Zero invokes this hook before persisting ``config.json``.  Using the
+    supplied settings lets the project-scoped activation bootstrap complete in
+    the same user action instead of waiting for a later chat or panel refresh.
+    """
+
+    del kwargs
+    config = load_config(settings if isinstance(settings, dict) else None)
     _ensure_auto_bootstrap(config)
     return config

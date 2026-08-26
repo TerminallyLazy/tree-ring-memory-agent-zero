@@ -12,6 +12,7 @@ def config(root: Path) -> dict:
     return {
         "cli": {"binary": "tree-ring", "required_version": "0.15.3", "timeout_seconds": 10},
         "storage": {"root": str(root), "legacy_sqlite_path": str(root / "indexes" / "memory.sqlite")},
+        "activation": {"enabled": False},
     }
 
 
@@ -79,6 +80,44 @@ def test_bootstrap_initializes_migrates_and_audits(tmp_path, monkeypatch):
     assert report["audit"]["finding_count"] == 0
 
 
+def test_bootstrap_waits_for_project_selection_without_initializing_default_store(
+    tmp_path, monkeypatch
+):
+    calls: list[str] = []
+    unresolved = config(tmp_path / "default-memory")
+    unresolved["activation"] = {"enabled": True}
+
+    class Bridge:
+        def __init__(self, resolved):
+            assert resolved["storage"]["root"] == str(tmp_path / "default-memory")
+
+        def status(self):
+            calls.append("status")
+            return {"ok": True, "initialized": False}
+
+        def init(self):
+            calls.append("init")
+            raise AssertionError("install must wait for an Agent Zero project selection")
+
+    monkeypatch.setattr(
+        hooks.paths,
+        "ensure_memory_dirs",
+        lambda resolved: (_ for _ in ()).throw(
+            AssertionError("install must not create the legacy global memory root")
+        ),
+    )
+    monkeypatch.setattr(hooks, "TreeRingCli", Bridge)
+
+    report = hooks.bootstrap_runtime(unresolved)
+
+    assert report["ok"] is True
+    assert report["ready"] is False
+    assert report["activation"]["state"] == "needs-project-mount"
+    assert report["message"] == "Choose an Agent Zero project to activate Tree Ring Memory."
+    assert calls == ["status"]
+    assert not (tmp_path / "default-memory").exists()
+
+
 def test_config_hook_bootstraps_once_per_memory_root(tmp_path, monkeypatch):
     calls: list[str] = []
     hooks._BOOTSTRAPPED_ROOTS.clear()
@@ -89,6 +128,28 @@ def test_config_hook_bootstraps_once_per_memory_root(tmp_path, monkeypatch):
 
     assert first == second
     assert calls == [str(tmp_path)]
+
+
+def test_save_config_bootstraps_the_selected_project_store(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    project.mkdir()
+    supplied = project_binding_config(project)
+    supplied["storage"]["root"] = str(project / ".tree-ring")
+    calls: list[str] = []
+    hooks._BOOTSTRAPPED_ROOTS.clear()
+    monkeypatch.setattr(
+        hooks,
+        "bootstrap_runtime",
+        lambda resolved: calls.append(resolved["storage"]["root"])
+        or {"ok": True, "ready": True},
+    )
+
+    saved = hooks.save_plugin_config(settings=supplied)
+
+    assert saved["activation"]["project_root"] == str(project)
+    assert saved["storage"]["root"] == str(project / ".tree-ring")
+    assert saved["scope"]["allowed_project_root"] == str(project)
+    assert calls == [str(project / ".tree-ring")]
 
 
 def test_auto_bootstrap_retries_when_project_binding_becomes_available(

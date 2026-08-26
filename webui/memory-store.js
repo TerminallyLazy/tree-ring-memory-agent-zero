@@ -164,6 +164,7 @@ export const store = createStore("treeRingMemory", {
     hydrateSettingsConfig(config) {
         if (!config || typeof config !== "object" || Array.isArray(config)) return false;
         mergeMissing(config, settingsDefaults);
+        config.cli.required_version = settingsDefaults.cli.required_version;
         return true;
     },
 

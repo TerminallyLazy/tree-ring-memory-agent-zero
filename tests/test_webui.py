@@ -92,6 +92,7 @@ def test_settings_hydrate_partial_legacy_config_before_alpine_binds_fields():
 
     assert "hydrateSettingsConfig(config)" in config
     assert "mergeMissing(config, settingsDefaults)" in store
+    assert "config.cli.required_version = settingsDefaults.cli.required_version" in store
     assert "config.coordination?.coordinator_profiles" in config
     assert "(config.coordination ??= {}).coordinator_profiles" in config
 

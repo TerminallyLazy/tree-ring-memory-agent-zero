@@ -11,7 +11,7 @@ class FakeBridge:
         self.calls: list[tuple[str, dict]] = []
 
     def status(self):
-        return {"ok": False, "required_version": "0.15.3", "error": "missing cli"}
+        return {"ok": False, "required_version": "0.15.4", "error": "missing cli"}
 
     def recall(self, query, **kwargs):
         self.calls.append(("recall", {"query": query, **kwargs}))
@@ -57,7 +57,7 @@ def test_status_preserves_readiness_details_when_cli_is_missing(monkeypatch):
     result = asyncio.run(handler.process({"action": "status"}, None))
 
     assert result["ok"] is False
-    assert result["data"]["required_version"] == "0.15.3"
+    assert result["data"]["required_version"] == "0.15.4"
     assert result["error"] == "missing cli"
 
 
@@ -76,12 +76,18 @@ def test_status_adds_only_redacted_server_activation_fields(monkeypatch):
         ),
     )
     fake.activation_status = lambda received: {
-        "state": "active",
         "store_id": "untrusted-core-store",
-        "receipt_age_seconds": 7,
-        "next_step": "Continue with the current project task.",
-        "receipt": {"recalled_summaries": ["must stay server-side"]},
-        "coordinator_capability": "must-not-leak",
+        "integrations": [
+            {"id": "codex", "state": "configured-awaiting-proof"},
+            {
+                "id": "agent-zero",
+                "state": "active",
+                "receipt_age_seconds": 7,
+                "next_step": "Continue with the current project task.",
+                "receipt": {"recalled_summaries": ["must stay server-side"]},
+                "coordinator_capability": "must-not-leak",
+            },
+        ],
     }
 
     result = asyncio.run(handler.process({"action": "status"}, None))

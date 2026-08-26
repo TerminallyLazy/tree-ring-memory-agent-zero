@@ -1,8 +1,8 @@
 # Tree Ring Memory for Agent Zero
 
-Plugin `3.3.0` targets the released Tree Ring `0.15` activation protocol and
-requires Tree Ring `0.15.3` or a newer `0.15.x` patch. The published plugin
-bundles verified `0.15.3` Linux executables for Agent Zero's x86-64 and ARM64
+Plugin `3.3.1` targets the released Tree Ring `0.15` activation protocol and
+requires Tree Ring `0.15.4` or a newer `0.15.x` patch. The published plugin
+bundles verified `0.15.4` Linux executables for Agent Zero's x86-64 and ARM64
 Docker runtimes.
 
 This plugin is an Agent Zero bridge to the Rust-native Tree Ring Memory CLI. It
@@ -12,13 +12,13 @@ The Rust CLI owns validation, sensitivity classification, SQLite/FTS storage, re
 
 ## Release and update boundary
 
-- Plugin `3.3.0` supports `tree-ring` `0.15.3` through `0.15.x` and fails closed
+- Plugin `3.3.1` supports `tree-ring` `0.15.4` through `0.15.x` and fails closed
   on older or different-minor executables.
 - The checked-in `bin/` executables, provenance, and checksums are built from
-  immutable core tag `v0.15.3` on native Linux runners in the pinned Debian
+  immutable core tag `v0.15.4` on native Linux runners in the pinned Debian
   Bookworm build image.
-- The manual **Prepare Tree Ring 0.15.3 bundled binaries** workflow and
-  [`scripts/stage-v0153-bundled-binaries.sh`](scripts/stage-v0153-bundled-binaries.sh)
+- The manual **Prepare Tree Ring 0.15.4 bundled binaries** workflow and
+  [`scripts/stage-v0154-bundled-binaries.sh`](scripts/stage-v0154-bundled-binaries.sh)
   must be used together before any future bundled CLI replacement is published.
 
 ## Install and update
@@ -47,7 +47,7 @@ project's `.tree-ring` store.
 
 - Agent Zero with this directory mounted at `/a0/usr/plugins/tree_ring_memory/`.
 - An executable `tree-ring` `0.15.x` binary. The plugin requires at least
-  `0.15.3` and fails closed on other minor versions. Release builds bundle
+  `0.15.4` and fails closed on other minor versions. Release builds bundle
   Linux binaries for Agent Zero's `x86_64` and `aarch64` Docker runtimes.
 - Python 3.12+ in the Agent Zero framework runtime.
 
@@ -134,7 +134,7 @@ The `0.15` bridge never auto-opens an existing unversioned v0.12 or versioned
 schema-v1/v2 store. The dashboard and settings report `upgrade_required` while
 normal store operations remain blocked. The `pre-v0.13` wording in backup
 filenames and markers is historical schema provenance, not a claim that a
-v0.13 runtime is supported by plugin `3.3.0`.
+v0.13 runtime is supported by plugin `3.3.1`.
 
 Treat the upgrade as an offline, one-way operation:
 

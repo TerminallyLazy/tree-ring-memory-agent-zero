@@ -10,7 +10,7 @@ from usr.plugins.tree_ring_memory import hooks
 
 def config(root: Path) -> dict:
     return {
-        "cli": {"binary": "tree-ring", "required_version": "0.15.3", "timeout_seconds": 10},
+        "cli": {"binary": "tree-ring", "required_version": "0.15.4", "timeout_seconds": 10},
         "storage": {"root": str(root), "legacy_sqlite_path": str(root / "indexes" / "memory.sqlite")},
         "activation": {"enabled": False},
     }

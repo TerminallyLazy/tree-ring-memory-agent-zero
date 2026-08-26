@@ -2,7 +2,8 @@ import { createStore } from "/js/AlpineStore.js";
 import { callJsonApi } from "/js/api.js";
 
 const apiPath = "/plugins/tree_ring_memory/memory_api";
-const writerContextStorageKey = "tree-ring-memory.writer-context";
+const writerContextStorageKey = "tree-ring-memory.writer-context.v2";
+const legacyWriterContextStorageKey = "tree-ring-memory.writer-context";
 
 const mutationActions = new Set([
     "remember",
@@ -20,7 +21,7 @@ const settingsDefaults = {
     enabled: true,
     cli: {
         binary: "tree-ring",
-        required_version: "0.15.3",
+        required_version: "0.15.4",
         timeout_seconds: 30,
     },
     storage: {
@@ -75,18 +76,24 @@ function currentContextId() {
     return String(alpineStore("treeRingMemory")?.writerContextId || activeContextId() || "");
 }
 
-function savedWriterContextId() {
+function savedWriterContextId(projectName = "") {
     try {
-        return String(window.sessionStorage.getItem(writerContextStorageKey) || "");
+        const saved = JSON.parse(window.localStorage.getItem(writerContextStorageKey) || "{}");
+        const projectId = saved && typeof saved === "object" ? saved[projectName] : "";
+        return String(projectId || window.sessionStorage.getItem(legacyWriterContextStorageKey) || "");
     } catch {
         return "";
     }
 }
 
-function saveWriterContextId(contextId) {
+function saveWriterContextId(contextId, projectName = "") {
     try {
-        if (contextId) window.sessionStorage.setItem(writerContextStorageKey, contextId);
-        else window.sessionStorage.removeItem(writerContextStorageKey);
+        const saved = JSON.parse(window.localStorage.getItem(writerContextStorageKey) || "{}");
+        const next = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+        if (contextId) next[projectName] = contextId;
+        else delete next[projectName];
+        window.localStorage.setItem(writerContextStorageKey, JSON.stringify(next));
+        window.sessionStorage.removeItem(legacyWriterContextStorageKey);
     } catch {
         // The in-memory selection remains valid when browser storage is unavailable.
     }
@@ -138,7 +145,7 @@ export const store = createStore("treeRingMemory", {
     stats: { counts: {} },
     status: {
         ok: false,
-        required_version: "0.15.3",
+        required_version: "0.15.4",
         activation: {
             state: "unknown",
             receipt_age_seconds: null,
@@ -214,24 +221,25 @@ export const store = createStore("treeRingMemory", {
 
     writerContextSummary() {
         const selected = this.selectedWriterContext();
-        return selected
-            ? `Mutations are attributed through ${this.writerContextLabel(selected)}.`
-            : "Start a chat to establish an Agent Zero writer identity.";
+        const project = this.contextProjectName(selected) || this.currentProjectName();
+        return project
+            ? `Writes use the active ${project} project context.`
+            : "Open a project chat to establish its writer identity.";
     },
 
     syncWriterContext(projectName = this.currentProjectName()) {
         const contexts = this.writerContexts(projectName);
         const available = new Set(contexts.map((context) => String(context?.id || "")));
-        const selected = [this.writerContextId, savedWriterContextId(), activeContextId()]
+        const selected = [this.writerContextId, savedWriterContextId(projectName), activeContextId()]
             .find((contextId) => contextId && available.has(contextId));
         this.writerContextId = String(selected || contexts[0]?.id || "");
-        saveWriterContextId(this.writerContextId);
+        saveWriterContextId(this.writerContextId, projectName);
         return this.writerContextId;
     },
 
     selectWriterContext(contextId) {
         this.writerContextId = String(contextId || "");
-        saveWriterContextId(this.writerContextId);
+        saveWriterContextId(this.writerContextId, this.currentProjectName());
         return this.writerContextId;
     },
 
@@ -263,19 +271,34 @@ export const store = createStore("treeRingMemory", {
 
     async activateProject(config, settingsContext) {
         const projectName = String(settingsContext?.projectName || "");
+        const agentProfile = String(settingsContext?.agentProfileKey || "");
         this.activationBusy = true;
         try {
             this.configureProjectActivation(config, projectName);
-            this.syncWriterContext(projectName);
-            await settingsContext.save();
-            if (settingsContext.error) throw new Error(settingsContext.error);
+            const contextId = this.syncWriterContext(projectName);
+            const saved = await callJsonApi("/plugins", {
+                action: "save_config",
+                plugin_name: "tree_ring_memory",
+                project_name: projectName,
+                agent_profile: agentProfile,
+                settings: config,
+            });
+            if (!saved.ok) throw new Error(saved.error || "Project settings could not be saved.");
+            if (typeof settingsContext?._toComparableJson === "function") {
+                settingsContext.settingsSnapshotJson = settingsContext._toComparableJson(config);
+            }
 
-            if (!this.writerContextId) {
+            if (!contextId) {
                 notify(`Tree Ring is configured for ${projectName}. Start or open a project chat to create its activation receipt.`, "success");
+                await this.refreshStatus();
                 return;
             }
 
-            const response = await post("preflight");
+            const response = await callJsonApi(apiPath, {
+                action: "preflight",
+                context_id: contextId,
+            });
+            if (!response.ok) throw new Error(response.error || "Project activation preflight failed.");
             const state = String(response.data?.state || "");
             notify(
                 state === "active"

@@ -166,19 +166,13 @@
                             spellcheck="false"
                         />
                     </label>
-                    <label class="trm-path-field">
-                        <span>Writer context for protected actions</span>
-                        <select
-                            x-model="$store.treeRingMemory.writerContextId"
-                            @change="$store.treeRingMemory.selectWriterContext($event.target.value)"
-                            aria-label="Tree Ring writer context"
-                        >
-                            <option value="" disabled>No chat context available</option>
-                            <template x-for="writerContext in $store.treeRingMemory.writerContexts(context.projectName)" :key="writerContext.id">
-                                <option :value="writerContext.id" x-text="$store.treeRingMemory.writerContextLabel(writerContext)"></option>
-                            </template>
-                        </select>
-                    </label>
+                    <div class="trm-project-choice" :class="{ 'is-ready': $store.treeRingMemory.hasWriterContext() }">
+                        <span class="material-symbols-outlined">badge</span>
+                        <div>
+                            <strong>Writer project</strong>
+                            <span x-text="$store.treeRingMemory.writerContextSummary()"></span>
+                        </div>
+                    </div>
                     <p class="trm-footnote" x-text="$store.treeRingMemory.writerContextSummary()"></p>
                     <div class="trm-action-row">
                         <button type="button" class="btn btn-field" @click="$store.treeRingMemory.refreshPolicy()">Refresh policy</button>

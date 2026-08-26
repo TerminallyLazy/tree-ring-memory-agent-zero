@@ -17,7 +17,7 @@ from usr.plugins.tree_ring_memory.helpers.context import InvocationContext
 
 def config(root: Path, binary: Path | str) -> dict:
     return {
-        "cli": {"binary": str(binary), "required_version": "0.15.3", "timeout_seconds": 10},
+        "cli": {"binary": str(binary), "required_version": "0.15.4", "timeout_seconds": 10},
         "storage": {"root": str(root)},
         "scope": {"allowed_project_root": str(root.parent)},
     }
@@ -53,7 +53,7 @@ def recording_runner(calls: list[tuple[list[str], dict[str, object]]]):
     def runner(command, **kwargs):
         calls.append((command, kwargs))
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.3\\n")
+            return completed(command, "tree-ring 0.15.4\\n")
         if "status" in command:
             return completed(command, json.dumps({"state": "configured-awaiting-proof"}))
         return completed(command, json.dumps({"state": "active"}))
@@ -176,7 +176,7 @@ def test_rejects_incompatible_cli_minor_version(tmp_path, installed_version):
 
     bridge = TreeRingCli(config(tmp_path / "memory", binary), runner=runner)
 
-    with pytest.raises(TreeRingCliError, match="requires 0.15.3 through 0.15.x"):
+    with pytest.raises(TreeRingCliError, match="requires 0.15.4 through 0.15.x"):
         _ = bridge.version
 
 
@@ -202,7 +202,7 @@ def test_recall_preserves_rust_ranking_before_host_filters(tmp_path):
     def runner(command, **kwargs):
         del kwargs
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.3\n")
+            return completed(command, "tree-ring 0.15.4\n")
         assert "recall" in command
         payload = [
             {"memory": first, "score": 0.91, "ranking": {}},
@@ -240,7 +240,7 @@ def test_include_all_agents_suppresses_context_defaults_but_keeps_explicit_filte
     def runner(command, **kwargs):
         del kwargs
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.3\n")
+            return completed(command, "tree-ring 0.15.4\n")
         calls.append(command)
         return completed(
             command,
@@ -300,7 +300,7 @@ def test_identity_is_explicit_and_ambient_identity_is_removed(tmp_path, monkeypa
     def runner(command, **kwargs):
         calls.append((command, kwargs["env"]))
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.3\n")
+            return completed(command, "tree-ring 0.15.4\n")
         return completed(command, json.dumps({"id": "mem_context"}))
 
     bridge = TreeRingCli(
@@ -363,7 +363,7 @@ def test_capability_is_reinserted_only_for_authorized_protected_mutation(
     def runner(command, **kwargs):
         calls.append((command, kwargs["env"]))
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.3\n")
+            return completed(command, "tree-ring 0.15.4\n")
         return completed(command, json.dumps({"id": "mem_protected"}))
 
     unprivileged = TreeRingCli(
@@ -406,7 +406,7 @@ def test_cli_error_never_renders_coordinator_capability(tmp_path, monkeypatch):
     def runner(command, **kwargs):
         del kwargs
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.3\n")
+            return completed(command, "tree-ring 0.15.4\n")
         return completed(command, "", returncode=2, stderr=f"denied {token}")
 
     bridge = TreeRingCli(
@@ -441,7 +441,7 @@ def test_capability_in_write_field_is_rejected_before_any_subprocess(
     def runner(command, **kwargs):
         del kwargs
         calls.append(command)
-        return completed(command, "tree-ring 0.15.3\n")
+        return completed(command, "tree-ring 0.15.4\n")
 
     bridge = TreeRingCli(config(root, binary), runner=runner)
 
@@ -471,7 +471,7 @@ def test_capability_is_redacted_recursively_from_successful_json_output(
     def runner(command, **kwargs):
         del kwargs
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.3\n")
+            return completed(command, "tree-ring 0.15.4\n")
         return completed(
             command,
             json.dumps(
@@ -506,7 +506,7 @@ def test_read_only_audit_wrappers_do_not_create_missing_store(
     def runner(command, **kwargs):
         del kwargs
         calls.append(command)
-        return completed(command, "tree-ring 0.15.3\n")
+        return completed(command, "tree-ring 0.15.4\n")
 
     bridge = TreeRingCli(config(root, binary), runner=runner)
 
@@ -539,7 +539,7 @@ def test_read_only_audit_wrappers_do_not_mutate_schema_v2_store(
     def runner(command, **kwargs):
         del kwargs
         calls.append(command)
-        return completed(command, "tree-ring 0.15.3\n")
+        return completed(command, "tree-ring 0.15.4\n")
 
     bridge = TreeRingCli(config(root, binary), runner=runner)
 
@@ -566,7 +566,7 @@ def test_policy_audit_rejects_out_of_range_limit_before_dispatch(
         del kwargs
         calls.append(command)
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.3\n")
+            return completed(command, "tree-ring 0.15.4\n")
         return completed(command, "[]")
 
     bridge = TreeRingCli(config(root, binary), runner=runner)
@@ -587,7 +587,7 @@ def test_write_project_cannot_escape_active_agent_zero_project(tmp_path):
             agent_profile="worker", project="active-project"
         ),
         runner=lambda command, **kwargs: completed(
-            command, "tree-ring 0.15.3\n"
+            command, "tree-ring 0.15.4\n"
         ),
     )
 
@@ -599,7 +599,7 @@ def test_write_project_cannot_escape_active_agent_zero_project(tmp_path):
         )
 
 
-def test_real_v0153_cli_round_trip_when_available(tmp_path):
+def test_real_v0154_cli_round_trip_when_available(tmp_path):
     binary = os.environ.get("TREE_RING_MEMORY_CLI") or shutil.which("tree-ring")
     if not binary:
         pytest.skip("tree-ring CLI is not available in this runtime")
@@ -641,7 +641,7 @@ def test_real_v0153_cli_round_trip_when_available(tmp_path):
     assert bridge.status()["version"].startswith("0.15.")
 
 
-def test_real_v0153_coordinated_bridge_flow_when_available(
+def test_real_v0154_coordinated_bridge_flow_when_available(
     tmp_path, monkeypatch
 ):
     binary = os.environ.get("TREE_RING_MEMORY_CLI") or shutil.which("tree-ring")
@@ -683,7 +683,7 @@ def test_real_v0153_coordinated_bridge_flow_when_available(
     def blocked_runner(command, **kwargs):
         del kwargs
         blocked_calls.append(command)
-        return completed(command, "tree-ring 0.15.3\n")
+        return completed(command, "tree-ring 0.15.4\n")
 
     blocked = TreeRingCli(
         configured,

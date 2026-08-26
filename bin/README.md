@@ -1,6 +1,6 @@
 # Bundled Tree Ring CLI
 
-Plugin `3.2.0` requires Tree Ring `0.15.3` through `0.15.x`. These executables
+Plugin `3.3.0` requires Tree Ring `0.15.3` through `0.15.x`. These executables
 are built from immutable Tree Ring Memory tag `v0.15.3`, commit
 `33e42915585fba4e434ac0c35ea1dbb62d96c9b9`, using the locked dependency graph
 and pinned

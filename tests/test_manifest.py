@@ -29,7 +29,7 @@ def test_manifest_declares_rust_bridge_generation():
     capability = json.loads((ROOT / "activation-capability.json").read_text(encoding="utf-8"))
 
     assert manifest["name"] == "tree_ring_memory"
-    assert manifest["version"] == "3.2.0"
+    assert manifest["version"] == "3.3.0"
     assert defaults["cli"]["required_version"] == "0.15.3"
     assert defaults["coordination"]["coordinator_profiles"] == []
     assert defaults["storage"]["root"].endswith("/tree_ring_memory")
@@ -38,7 +38,7 @@ def test_manifest_declares_rust_bridge_generation():
         "schema_version": 1,
         "kind": "tree-ring-agent-zero-plugin-capability",
         "plugin_id": "tree_ring_memory",
-        "plugin_version": "3.2.0",
+        "plugin_version": "3.3.0",
         "activation_protocol_version": 1,
         "tree_ring_version": {"min": "0.15.3", "minor": "0.15"},
         "enabled": True,
@@ -54,9 +54,12 @@ def test_release_docs_match_v0153_bundle():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     bundled = (ROOT / "bin" / "README.md").read_text(encoding="utf-8")
 
-    assert "Plugin `3.2.0` targets the released Tree Ring `0.15`" in readme
+    assert "Plugin `3.3.0` targets the released Tree Ring `0.15`" in readme
     assert "supports `tree-ring` `0.15.3` through `0.15.x`" in readme
-    assert "Plugin `3.2.0` requires Tree Ring `0.15.3` through `0.15.x`" in bundled
+    assert "Activate this project" in readme
+    assert "session-specific identity" in readme
+    assert "does not initialize the legacy global memory root" in readme
+    assert "Plugin `3.3.0` requires Tree Ring `0.15.3` through `0.15.x`" in bundled
     assert "immutable Tree Ring Memory tag `v0.15.3`" in bundled
 
 

@@ -42,6 +42,7 @@
                     </div>
                     <select
                         x-model="$store.treeRingMemory.writerContextId"
+                        @change="$store.treeRingMemory.selectWriterContext($event.target.value)"
                         aria-label="Tree Ring writer context"
                     >
                         <option value="" disabled>No chat context available</option>

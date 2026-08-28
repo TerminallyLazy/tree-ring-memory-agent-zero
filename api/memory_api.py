@@ -21,6 +21,7 @@ from usr.plugins.tree_ring_memory.helpers.activation import (
 from usr.plugins.tree_ring_memory.helpers.legacy import LegacyMigrationError, LegacyMigrator
 from usr.plugins.tree_ring_memory.helpers.upgrade import SchemaUpgradeError
 from usr.plugins.tree_ring_memory.helpers.values import parse_bool
+from usr.plugins.tree_ring_memory.runtime.lifecycle import latest_lifecycle_result
 
 
 def envelope(
@@ -417,6 +418,22 @@ def _redacted_activation_payload(
         age = activation.get("receipt_age_seconds")
         if isinstance(age, (int, float)) and not isinstance(age, bool) and age >= 0:
             receipt_age_seconds = age
+
+    lifecycle = latest_lifecycle_result(status.store_id)
+    if (
+        lifecycle is not None
+        and not lifecycle.injected
+        and lifecycle.state == "configured-awaiting-proof"
+    ):
+        # A core receipt alone must not claim that Agent Zero actually accepted
+        # the returned prompt context. Keep the public state awaiting proof when
+        # this process observed an injection failure.
+        state = "configured-awaiting-proof"
+        receipt_age_seconds = None
+        next_step = (
+            "Tree Ring context injection did not complete; start a new Agent Zero "
+            "turn after repairing activation."
+        )
 
     data: dict[str, Any] = {
         "state": state,

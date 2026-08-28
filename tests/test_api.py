@@ -11,7 +11,7 @@ class FakeBridge:
         self.calls: list[tuple[str, dict]] = []
 
     def status(self):
-        return {"ok": False, "required_version": "0.15.4", "error": "missing cli"}
+        return {"ok": False, "required_version": "0.15.5", "error": "missing cli"}
 
     def recall(self, query, **kwargs):
         self.calls.append(("recall", {"query": query, **kwargs}))
@@ -57,7 +57,7 @@ def test_status_preserves_readiness_details_when_cli_is_missing(monkeypatch):
     result = asyncio.run(handler.process({"action": "status"}, None))
 
     assert result["ok"] is False
-    assert result["data"]["required_version"] == "0.15.4"
+    assert result["data"]["required_version"] == "0.15.5"
     assert result["error"] == "missing cli"
 
 
@@ -98,6 +98,73 @@ def test_status_adds_only_redacted_server_activation_fields(monkeypatch):
         "receipt_age_seconds": 7,
         "next_step": "Continue with the current project task.",
     }
+
+
+def test_status_does_not_claim_active_after_observed_injection_failure(monkeypatch):
+    handler, fake = handler_with_fake(monkeypatch)
+    binding = object()
+    monkeypatch.setattr(
+        memory_api,
+        "load_activation_binding",
+        lambda config: SimpleNamespace(
+            state="configured-awaiting-proof",
+            binding=binding,
+            store_id="store-fixture",
+            next_step="Run Tree Ring preflight in a new Agent Zero session.",
+            error=None,
+        ),
+    )
+    monkeypatch.setattr(
+        memory_api,
+        "latest_lifecycle_result",
+        lambda store_id: SimpleNamespace(
+            state="configured-awaiting-proof", injected=False
+        ),
+    )
+    fake.activation_status = lambda received: {
+        "integrations": [
+            {
+                "id": "agent-zero",
+                "state": "active",
+                "receipt_age_seconds": 3,
+                "next_step": "Continue.",
+            }
+        ]
+    }
+
+    result = asyncio.run(handler.process({"action": "status"}, None))
+
+    assert result["data"]["activation"] == {
+        "state": "configured-awaiting-proof",
+        "store_id": "store-fixture",
+        "receipt_age_seconds": None,
+        "next_step": (
+            "Tree Ring context injection did not complete; start a new Agent Zero "
+            "turn after repairing activation."
+        ),
+    }
+
+
+def test_status_preserves_non_injection_activation_states(monkeypatch):
+    status = SimpleNamespace(
+        state="active-isolated",
+        binding=object(),
+        store_id="store-fixture",
+        next_step="Use the mounted project store.",
+        error=None,
+    )
+    monkeypatch.setattr(
+        memory_api,
+        "latest_lifecycle_result",
+        lambda store_id: SimpleNamespace(state="active-isolated", injected=False),
+    )
+
+    result = memory_api._redacted_activation_payload(
+        status, {"state": "active-isolated"}
+    )
+
+    assert result["state"] == "active-isolated"
+    assert result["next_step"] == "Use the mounted project store."
 
 
 def test_remember_rejects_python_only_fields(monkeypatch):

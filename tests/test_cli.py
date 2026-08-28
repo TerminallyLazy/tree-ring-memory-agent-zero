@@ -17,7 +17,7 @@ from usr.plugins.tree_ring_memory.helpers.context import InvocationContext
 
 def config(root: Path, binary: Path | str) -> dict:
     return {
-        "cli": {"binary": str(binary), "required_version": "0.15.4", "timeout_seconds": 10},
+        "cli": {"binary": str(binary), "required_version": "0.15.5", "timeout_seconds": 10},
         "storage": {"root": str(root)},
         "scope": {"allowed_project_root": str(root.parent)},
     }
@@ -53,7 +53,7 @@ def recording_runner(calls: list[tuple[list[str], dict[str, object]]]):
     def runner(command, **kwargs):
         calls.append((command, kwargs))
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.4\\n")
+            return completed(command, "tree-ring 0.15.5\\n")
         if "status" in command:
             return completed(command, json.dumps({"state": "configured-awaiting-proof"}))
         return completed(command, json.dumps({"state": "active"}))
@@ -132,6 +132,122 @@ def test_preflight_short_circuits_an_isolated_binding(tmp_path):
     assert calls == []
 
 
+def test_capture_forwards_all_required_server_identity_and_checkpoint_fields(tmp_path):
+    binary = executable(tmp_path)
+    root = tmp_path / "memory"
+    create_schema_v3_store(root)
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    bridge = TreeRingCli(
+        config(root, binary),
+        context=InvocationContext(
+            agent_profile="reviewer",
+            project="trusted-project",
+            workflow_id="workflow-7",
+            session_id="session-9",
+        ),
+        runner=recording_runner(calls),
+    )
+
+    result = bridge.capture(
+        "Preserve bounded lifecycle checkpoints.",
+        event_type="lesson",
+        ring="scar",
+        operation_id="auto-trcp_v1_fixture-1",
+        source_ref="agent-checkpoint:trcp_v1_fixture",
+        tags=["lifecycle"],
+    )
+
+    command, _ = calls[-1]
+    assert result == {"state": "active"}
+    assert command[command.index("capture") :] == [
+        "capture",
+        "Preserve bounded lifecycle checkpoints.",
+        "--event-type",
+        "lesson",
+        "--ring",
+        "scar",
+        "--project",
+        "trusted-project",
+        "--agent-profile",
+        "reviewer",
+        "--workflow-id",
+        "workflow-7",
+        "--session-id",
+        "session-9",
+        "--operation-id",
+        "auto-trcp_v1_fixture-1",
+        "--source-ref",
+        "agent-checkpoint:trcp_v1_fixture",
+        "--tag",
+        "lifecycle",
+    ]
+
+
+def test_capture_rejects_missing_server_identity_before_dispatch(tmp_path):
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    bridge = TreeRingCli(
+        config(tmp_path / "memory", executable(tmp_path)),
+        context=InvocationContext(agent_profile="reviewer"),
+        runner=recording_runner(calls),
+    )
+
+    with pytest.raises(TreeRingCliError, match="server-derived project, workflow id, session id"):
+        bridge.capture(
+            "Candidate",
+            event_type="lesson",
+            ring="cambium",
+            operation_id="auto-checkpoint-1",
+            source_ref="agent-checkpoint:checkpoint",
+        )
+
+    assert calls == []
+
+
+def test_capture_surfaces_core_normal_sensitivity_rejection(tmp_path):
+    binary = executable(tmp_path)
+    root = tmp_path / "memory"
+    create_schema_v3_store(root)
+    calls: list[list[str]] = []
+
+    def runner(command, **kwargs):
+        del kwargs
+        calls.append(command)
+        if "--version" in command:
+            return completed(command, "tree-ring 0.15.5\n")
+        return completed(
+            command,
+            "",
+            returncode=1,
+            stderr="automatic capture accepts only normal-sensitivity candidates\n",
+        )
+
+    bridge = TreeRingCli(
+        config(root, binary),
+        context=InvocationContext(
+            agent_profile="reviewer",
+            project="trusted-project",
+            workflow_id="workflow-7",
+            session_id="session-9",
+        ),
+        runner=runner,
+    )
+
+    with pytest.raises(
+        TreeRingCliError,
+        match="automatic capture accepts only normal-sensitivity candidates",
+    ):
+        bridge.capture(
+            "Sensitive candidate",
+            event_type="lesson",
+            ring="cambium",
+            operation_id="auto-trcp_v1_fixture-1",
+            source_ref="agent-checkpoint:trcp_v1_fixture",
+        )
+
+    assert "capture" in calls[-1]
+    assert "remember" not in calls[-1]
+
+
 def test_status_reports_missing_cli_without_initializing(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", "")
     monkeypatch.delenv("TREE_RING_MEMORY_CLI", raising=False)
@@ -165,7 +281,8 @@ def test_resolves_bundled_binary_for_linux_architecture(tmp_path, monkeypatch, m
 
 
 @pytest.mark.parametrize(
-    "installed_version", ["0.11.0", "0.15.1", "0.15.2", "0.16.0"]
+    "installed_version",
+    ["0.11.0", "0.15.1", "0.15.2", "0.15.4", "0.16.0"],
 )
 def test_rejects_incompatible_cli_minor_version(tmp_path, installed_version):
     binary = executable(tmp_path)
@@ -176,7 +293,7 @@ def test_rejects_incompatible_cli_minor_version(tmp_path, installed_version):
 
     bridge = TreeRingCli(config(tmp_path / "memory", binary), runner=runner)
 
-    with pytest.raises(TreeRingCliError, match="requires 0.15.4 through 0.15.x"):
+    with pytest.raises(TreeRingCliError, match="requires 0.15.5 through 0.15.x"):
         _ = bridge.version
 
 
@@ -185,11 +302,11 @@ def test_accepts_supported_cli_patch_version(tmp_path):
 
     def runner(command, **kwargs):
         del kwargs
-        return completed(command, "tree-ring 0.15.4\n")
+        return completed(command, "tree-ring 0.15.5\n")
 
     bridge = TreeRingCli(config(tmp_path / "memory", binary), runner=runner)
 
-    assert bridge.version == "0.15.4"
+    assert bridge.version == "0.15.5"
 
 
 def test_recall_preserves_rust_ranking_before_host_filters(tmp_path):
@@ -202,7 +319,7 @@ def test_recall_preserves_rust_ranking_before_host_filters(tmp_path):
     def runner(command, **kwargs):
         del kwargs
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.4\n")
+            return completed(command, "tree-ring 0.15.5\n")
         assert "recall" in command
         payload = [
             {"memory": first, "score": 0.91, "ranking": {}},
@@ -240,7 +357,7 @@ def test_include_all_agents_suppresses_context_defaults_but_keeps_explicit_filte
     def runner(command, **kwargs):
         del kwargs
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.4\n")
+            return completed(command, "tree-ring 0.15.5\n")
         calls.append(command)
         return completed(
             command,
@@ -300,7 +417,7 @@ def test_identity_is_explicit_and_ambient_identity_is_removed(tmp_path, monkeypa
     def runner(command, **kwargs):
         calls.append((command, kwargs["env"]))
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.4\n")
+            return completed(command, "tree-ring 0.15.5\n")
         return completed(command, json.dumps({"id": "mem_context"}))
 
     bridge = TreeRingCli(
@@ -363,7 +480,7 @@ def test_capability_is_reinserted_only_for_authorized_protected_mutation(
     def runner(command, **kwargs):
         calls.append((command, kwargs["env"]))
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.4\n")
+            return completed(command, "tree-ring 0.15.5\n")
         return completed(command, json.dumps({"id": "mem_protected"}))
 
     unprivileged = TreeRingCli(
@@ -406,7 +523,7 @@ def test_cli_error_never_renders_coordinator_capability(tmp_path, monkeypatch):
     def runner(command, **kwargs):
         del kwargs
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.4\n")
+            return completed(command, "tree-ring 0.15.5\n")
         return completed(command, "", returncode=2, stderr=f"denied {token}")
 
     bridge = TreeRingCli(
@@ -441,7 +558,7 @@ def test_capability_in_write_field_is_rejected_before_any_subprocess(
     def runner(command, **kwargs):
         del kwargs
         calls.append(command)
-        return completed(command, "tree-ring 0.15.4\n")
+        return completed(command, "tree-ring 0.15.5\n")
 
     bridge = TreeRingCli(config(root, binary), runner=runner)
 
@@ -471,7 +588,7 @@ def test_capability_is_redacted_recursively_from_successful_json_output(
     def runner(command, **kwargs):
         del kwargs
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.4\n")
+            return completed(command, "tree-ring 0.15.5\n")
         return completed(
             command,
             json.dumps(
@@ -506,7 +623,7 @@ def test_read_only_audit_wrappers_do_not_create_missing_store(
     def runner(command, **kwargs):
         del kwargs
         calls.append(command)
-        return completed(command, "tree-ring 0.15.4\n")
+        return completed(command, "tree-ring 0.15.5\n")
 
     bridge = TreeRingCli(config(root, binary), runner=runner)
 
@@ -539,7 +656,7 @@ def test_read_only_audit_wrappers_do_not_mutate_schema_v2_store(
     def runner(command, **kwargs):
         del kwargs
         calls.append(command)
-        return completed(command, "tree-ring 0.15.4\n")
+        return completed(command, "tree-ring 0.15.5\n")
 
     bridge = TreeRingCli(config(root, binary), runner=runner)
 
@@ -566,7 +683,7 @@ def test_policy_audit_rejects_out_of_range_limit_before_dispatch(
         del kwargs
         calls.append(command)
         if "--version" in command:
-            return completed(command, "tree-ring 0.15.4\n")
+            return completed(command, "tree-ring 0.15.5\n")
         return completed(command, "[]")
 
     bridge = TreeRingCli(config(root, binary), runner=runner)
@@ -587,7 +704,7 @@ def test_write_project_cannot_escape_active_agent_zero_project(tmp_path):
             agent_profile="worker", project="active-project"
         ),
         runner=lambda command, **kwargs: completed(
-            command, "tree-ring 0.15.4\n"
+            command, "tree-ring 0.15.5\n"
         ),
     )
 
@@ -599,7 +716,7 @@ def test_write_project_cannot_escape_active_agent_zero_project(tmp_path):
         )
 
 
-def test_real_v0154_cli_round_trip_when_available(tmp_path):
+def test_real_v0155_cli_round_trip_when_available(tmp_path):
     binary = os.environ.get("TREE_RING_MEMORY_CLI") or shutil.which("tree-ring")
     if not binary:
         pytest.skip("tree-ring CLI is not available in this runtime")
@@ -641,7 +758,48 @@ def test_real_v0154_cli_round_trip_when_available(tmp_path):
     assert bridge.status()["version"].startswith("0.15.")
 
 
-def test_real_v0154_coordinated_bridge_flow_when_available(
+def test_real_v0155_strict_capture_round_trip_when_available(tmp_path):
+    binary = os.environ.get("TREE_RING_MEMORY_CLI") or shutil.which("tree-ring")
+    if not binary:
+        pytest.skip("tree-ring CLI is not available in this runtime")
+    root = tmp_path / "project" / ".tree-ring"
+    bridge = TreeRingCli(
+        config(root, binary),
+        context=InvocationContext(
+            agent_profile="agent-zero-capture-test",
+            project="strict-project",
+            workflow_id="capture-workflow",
+            session_id="capture-session",
+        ),
+    )
+    try:
+        _ = bridge.version
+    except TreeRingCliError:
+        if os.environ.get("TREE_RING_MEMORY_CLI"):
+            raise
+        pytest.skip("the tree-ring CLI on PATH is not a compatible v0.15.x build")
+
+    bridge.init()
+    captured = bridge.capture(
+        "Keep automatic capture agent-scoped and checkpoint-bound.",
+        event_type="decision",
+        ring="cambium",
+        operation_id="auto-trcp_v1_real-1",
+        source_ref="agent-checkpoint:trcp_v1_real",
+    )
+
+    assert captured["scope"] == "agent"
+    assert captured["project"] == "strict-project"
+    assert captured["agent_profile"] == "agent-zero-capture-test"
+    assert captured["workflow_id"] == "capture-workflow"
+    assert captured["session_id"] == "capture-session"
+    assert captured["operation_id"] == "auto-trcp_v1_real-1"
+    assert captured["source"]["ref"] == "agent-checkpoint:trcp_v1_real"
+    assert captured["sensitivity"] == "normal"
+    assert "automatic-capture" in captured["tags"]
+
+
+def test_real_v0155_coordinated_bridge_flow_when_available(
     tmp_path, monkeypatch
 ):
     binary = os.environ.get("TREE_RING_MEMORY_CLI") or shutil.which("tree-ring")
@@ -683,7 +841,7 @@ def test_real_v0154_coordinated_bridge_flow_when_available(
     def blocked_runner(command, **kwargs):
         del kwargs
         blocked_calls.append(command)
-        return completed(command, "tree-ring 0.15.4\n")
+        return completed(command, "tree-ring 0.15.5\n")
 
     blocked = TreeRingCli(
         configured,

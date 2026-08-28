@@ -1,9 +1,13 @@
 # Tree Ring Memory for Agent Zero
 
-Plugin `3.3.1` targets the released Tree Ring `0.15` activation protocol and
-requires Tree Ring `0.15.4` or a newer `0.15.x` patch. The published plugin
-bundles verified `0.15.4` Linux executables for Agent Zero's x86-64 and ARM64
-Docker runtimes.
+Plugin `3.4.0` targets the Tree Ring `0.15` activation and automatic-capture
+protocol and requires Tree Ring `0.15.5` or a newer `0.15.x` patch. Core
+`0.15.5` is the first compatible release target because the agent-mediated
+checkpoint depends on the `tree-ring capture` command.
+
+The checked-in Linux executables are verified `0.15.5` artifacts built from the
+immutable core release on native x86-64 and ARM64 GitHub runners. Their matching
+checksums and provenance are part of the plugin release surface.
 
 This plugin is an Agent Zero bridge to the Rust-native Tree Ring Memory CLI. It
 does not maintain a second Python memory engine.
@@ -12,14 +16,17 @@ The Rust CLI owns validation, sensitivity classification, SQLite/FTS storage, re
 
 ## Release and update boundary
 
-- Plugin `3.3.1` supports `tree-ring` `0.15.4` through `0.15.x` and fails closed
+- Plugin `3.4.0` supports `tree-ring` `0.15.5` through `0.15.x` and fails closed
   on older or different-minor executables.
-- The checked-in `bin/` executables, provenance, and checksums are built from
-  immutable core tag `v0.15.4` on native Linux runners in the pinned Debian
-  Bookworm build image.
-- The manual **Prepare Tree Ring 0.15.4 bundled binaries** workflow and
-  [`scripts/stage-v0154-bundled-binaries.sh`](scripts/stage-v0154-bundled-binaries.sh)
-  must be used together before any future bundled CLI replacement is published.
+- The activation capability also declares `0.15.5` as its minimum, so a core
+  without `tree-ring capture` cannot validate the plugin as active.
+- The current `bin/` executables, provenance, and checksums are pinned to
+  immutable core tag `v0.15.5`, commit
+  `ca17b0ec984dac9367561be97fa488ccd52ec594`.
+- The manual **Prepare Tree Ring 0.15.5 bundled binaries** workflow and
+  [`scripts/stage-v0155-bundled-binaries.sh`](scripts/stage-v0155-bundled-binaries.sh)
+  fail closed on non-0.15.5 or mismatched artifacts. The checked-in pair came
+  from successful native workflow run `33147052949`.
 
 ## Install and update
 
@@ -47,8 +54,9 @@ project's `.tree-ring` store.
 
 - Agent Zero with this directory mounted at `/a0/usr/plugins/tree_ring_memory/`.
 - An executable `tree-ring` `0.15.x` binary. The plugin requires at least
-  `0.15.4` and fails closed on other minor versions. Release builds bundle
-  Linux binaries for Agent Zero's `x86_64` and `aarch64` Docker runtimes.
+  `0.15.5` and fails closed on older patches or other minor versions. A release
+  build bundles compatible Linux binaries for Agent Zero's `x86_64` and
+  `aarch64` Docker runtimes.
 - Python 3.12+ in the Agent Zero framework runtime.
 
 Binary discovery order is:
@@ -106,6 +114,37 @@ claiming that shared activation.
 Installation alone is not activation proof. Only a fresh receipt-backed
 preflight against the mounted project and matching store can report `active`.
 
+## Native agent lifecycle
+
+The plugin registers two Agent Zero lifecycle extensions. Before the main model
+prompt is assembled, `message_loop_prompts_after` delegates to the shared
+runtime adapter. That adapter derives the active agent, project, workflow, and
+session identity from Agent Zero-owned context; runs one bounded, receipt-backed
+preflight for the context; and adds only accepted, size-bounded recall output to
+the `tree_ring_memory` prompt extra. It does not pass a raw user prompt or chat
+transcript to Tree Ring.
+
+The injected context also includes a fresh automatic-capture checkpoint. Before
+finalizing the task, the agent selects zero to three concise, normal-sensitivity
+durable candidates and calls only the strict `capture` tool for each accepted
+candidate. Zero is the expected result when the turn has no reusable learning.
+The agent must not create filler, transient status, unsupported claims,
+duplicate knowledge, or transcript summaries merely to produce a memory. Each
+candidate uses its own checkpoint-provided indexed `operation_id` and matching
+`source_ref`; retries reuse that candidate's slot, while different candidates
+never share one. Agent Zero derives identity and routing, and core `tree-ring
+capture` enforces the allowed event/ring pairs and rejects non-normal
+sensitivity. Manual `remember` and `evidence` remain available outside this
+automatic checkpoint.
+
+At `monologue_end`, the second extension removes only ephemeral lifecycle state
+and the injected prompt extra. It does not inspect history or persist anything.
+Lifecycle failure never marks the integration active and never blocks the normal
+Agent Zero prompt flow. Automatic capture is agent-mediated: the lifecycle
+adapter never scrapes raw prompts, transcripts, history, or scratchpads, never
+starts a background recorder, and never writes durable memory directly. A
+candidate is durable only after its explicit tool call succeeds.
+
 ## Storage
 
 The default memory root remains:
@@ -134,7 +173,7 @@ The `0.15` bridge never auto-opens an existing unversioned v0.12 or versioned
 schema-v1/v2 store. The dashboard and settings report `upgrade_required` while
 normal store operations remain blocked. The `pre-v0.13` wording in backup
 filenames and markers is historical schema provenance, not a claim that a
-v0.13 runtime is supported by plugin `3.3.1`.
+v0.13 runtime is supported by plugin `3.4.0`.
 
 Treat the upgrade as an offline, one-way operation:
 
@@ -177,8 +216,9 @@ This is operational write authorization for cooperative official processes shari
 
 ## Agent Tools
 
-- `remember`: concise agent-scoped memory with server-derived identity plus optional `operation_id` and `source_ref`.
-- `evidence`: evaluated outcomes with a required evidence reference.
+- `capture`: strict automatic-checkpoint writes bound to the active lifecycle checkpoint, server-derived identity, and one of three indexed slots.
+- `remember`: manual concise agent-scoped memory with server-derived identity plus optional `operation_id` and `source_ref`.
+- `evidence`: manual evaluated outcomes with a required evidence reference.
 - `recall`: Rust-ranked recall with native project/agent/workflow/session/scope filters and optional Agent Zero ring/event post-filters.
 - `forget`: explicit-ID delete or redact.
 - `consolidate`: daily, weekly, monthly, yearly, or manual consolidation.
@@ -188,7 +228,9 @@ This is operational write authorization for cooperative official processes shari
 - `sync_revolve`: Revolve evidence adapter; dry-run by default.
 - `import_memory`: dry-run by default, with optional duplicate replacement.
 - `export_memory`: canonical JSONL export.
-- `preflight`: produces the project-local, receipt-backed Agent Zero activation proof.
+- `preflight`: explicit diagnostic or fallback for the project-local,
+  receipt-backed Agent Zero activation proof; native lifecycle recall normally
+  runs it automatically.
 - `policy_status`: read-only coordinated-policy status.
 - `policy_audit`: read-only protected-write authorization decisions.
 
@@ -215,7 +257,8 @@ When the CLI is missing or incompatible, the panel stays available and shows the
 
 ## Lifecycle and Maintenance
 
-`hooks.py` owns automatic setup. Its install hook is idempotent, and Agent Zero
+`hooks.py` owns install and update setup, while native extensions own agent
+lifecycle recall and cleanup. The install hook is idempotent, and Agent Zero
 runs it after both fresh installs and updates. For a configured canonical
 mounted project root, it asks the released core to create the passive binding
 through the installed descriptor, then reloads that core-generated contract;
@@ -235,14 +278,16 @@ Focused package-layout tests use temporary roots and make no network calls:
 ```bash
 PYTHONDONTWRITEBYTECODE=1 \
 python3 -m pytest -q -p no:cacheprovider \
-  tests/test_manifest.py tests/test_webui.py tests/test_activation_package_layout.py
+  tests/test_manifest.py tests/test_lifecycle_extensions.py \
+  tests/test_webui.py tests/test_activation_package_layout.py
 
 node --check webui/memory-store.js
 ```
 
 Upstream certification uses the exact released CLI in a real Agent Zero package
-layout. The package tests also verify both bundled Linux binaries, immutable
-provenance, checksums, activation envelopes, and the source-only bridge contract.
+layout. Package tests verify both checked-in `0.15.5` binaries, their immutable
+source provenance and checksums, activation envelopes, lifecycle capture, and
+the source-only bridge contract.
 
 ## Contribution Boundary
 

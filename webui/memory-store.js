@@ -21,7 +21,7 @@ const settingsDefaults = {
     enabled: true,
     cli: {
         binary: "tree-ring",
-        required_version: "0.15.4",
+        required_version: "0.15.5",
         timeout_seconds: 30,
     },
     storage: {
@@ -145,7 +145,7 @@ export const store = createStore("treeRingMemory", {
     stats: { counts: {} },
     status: {
         ok: false,
-        required_version: "0.15.4",
+        required_version: "0.15.5",
         activation: {
             state: "unknown",
             receipt_age_seconds: null,

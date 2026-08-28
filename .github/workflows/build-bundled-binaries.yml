@@ -1,4 +1,4 @@
-name: Prepare Tree Ring 0.15.4 bundled binaries
+name: Prepare Tree Ring 0.15.5 bundled binaries
 
 on:
   workflow_dispatch:
@@ -8,8 +8,8 @@ permissions:
 
 env:
   TREE_RING_REPOSITORY: TerminallyLazy/Tree-Ring-Memory
-  TREE_RING_RELEASE_TAG: v0.15.4
-  TREE_RING_RELEASE_VERSION: 0.15.4
+  TREE_RING_RELEASE_TAG: v0.15.5
+  TREE_RING_RELEASE_VERSION: 0.15.5
   RUST_BOOKWORM_IMAGE: rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1
 
 jobs:
@@ -59,6 +59,7 @@ jobs:
           cargo test --locked -p tree-ring-memory-cli --test multi_agent_acceptance
           cargo build --release --locked -p tree-ring-memory-cli
           test "$(target/release/tree-ring --version)" = "tree-ring $TREE_RING_RELEASE_VERSION"
+          target/release/tree-ring capture --help >/dev/null
 
       - name: Verify Bookworm runtime boundary and stage artifact
         working-directory: upstream
@@ -91,12 +92,13 @@ jobs:
             echo "glibc=$(ldd --version | head -n 1)"
             echo "maximum_required_glibc=$maximum_glibc"
             echo "binary_version=$(target/release/tree-ring --version)"
+            echo "capture_command=verified"
           } > "bundle/${{ matrix.target }}/PROVENANCE.txt"
 
       - name: Upload verified native binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: tree-ring-v0.15.4-${{ matrix.target }}
+          name: tree-ring-v0.15.5-${{ matrix.target }}
           path: upstream/bundle/${{ matrix.target }}
           if-no-files-found: error
           retention-days: 90

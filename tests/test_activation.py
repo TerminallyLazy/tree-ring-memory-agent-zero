@@ -53,7 +53,7 @@ def write_protocol_one_project(
                 "protocol_version": protocol_version,
                 "store_id": store_id,
                 "project_root_fingerprint": FINGERPRINT,
-                "cli_version": "0.15.4",
+                "cli_version": "0.15.5",
                 "harnesses": {},
             }
         ),

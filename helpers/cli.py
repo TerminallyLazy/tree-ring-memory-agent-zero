@@ -61,7 +61,7 @@ class TreeRingCli:
 
     @property
     def required_version(self) -> str:
-        return str((self.config.get("cli") or {}).get("required_version") or "0.15.4")
+        return str((self.config.get("cli") or {}).get("required_version") or "0.15.5")
 
     @property
     def binary(self) -> Path:
@@ -271,6 +271,63 @@ class TreeRingCli:
         )
         payload = self._run_json(args, protected=protected)
         return _require_dict(payload, "remember")
+
+    def capture(
+        self,
+        summary: str,
+        *,
+        event_type: str,
+        ring: str,
+        operation_id: str,
+        source_ref: str,
+        tags: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
+        """Store one core-enforced automatic capture candidate.
+
+        Unlike manual ``remember``, routing identity is required and comes only
+        from the Agent Zero invocation context. The caller can classify the
+        concise candidate but cannot select project, agent, workflow, session,
+        scope, sensitivity, or a privileged capability.
+        """
+
+        project = self._bound_write_project(None)
+        required_identity = {
+            "project": project,
+            "agent profile": self.context.agent_profile,
+            "workflow id": self.context.workflow_id,
+            "session id": self.context.session_id,
+        }
+        missing = [label for label, value in required_identity.items() if not value]
+        if missing:
+            raise TreeRingCliError(
+                "Automatic capture requires server-derived " + ", ".join(missing) + "."
+            )
+
+        self.ensure_initialized()
+        args = [
+            "capture",
+            summary,
+            "--event-type",
+            event_type,
+            "--ring",
+            ring,
+            "--project",
+            str(project),
+            "--agent-profile",
+            str(self.context.agent_profile),
+            "--workflow-id",
+            str(self.context.workflow_id),
+            "--session-id",
+            str(self.context.session_id),
+            "--operation-id",
+            operation_id,
+            "--source-ref",
+            source_ref,
+        ]
+        for tag in tags or ():
+            if str(tag).strip():
+                args.extend(["--tag", str(tag).strip()])
+        return _require_dict(self._run_json(args), "capture")
 
     def evidence(
         self,

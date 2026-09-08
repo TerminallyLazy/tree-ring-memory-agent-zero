@@ -5,7 +5,7 @@
   "plugin_version": "3.4.1",
   "activation_protocol_version": 1,
   "tree_ring_version": {
-    "min": "0.15.6",
+    "min": "0.15.7",
     "minor": "0.15"
   },
   "enabled": true

@@ -9,8 +9,8 @@ from usr.plugins.tree_ring_memory.helpers.legacy import LegacyMigrator
 
 
 class StubCli:
-    required_version = "0.15.6"
-    version = "0.15.6"
+    required_version = "0.15.7"
+    version = "0.15.7"
 
     def __init__(self) -> None:
         self.calls: list[dict] = []

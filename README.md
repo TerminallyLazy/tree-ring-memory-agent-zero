@@ -1,11 +1,11 @@
 # Tree Ring Memory for Agent Zero
 
 Plugin `3.4.1` targets the Tree Ring `0.15` activation and automatic-capture
-protocol and requires Tree Ring `0.15.6` or a newer `0.15.x` patch. Core
-`0.15.6` is the first compatible release target because the agent-mediated
+protocol and requires Tree Ring `0.15.7` or a newer `0.15.x` patch. Core
+`0.15.7` is the first compatible release target because the agent-mediated
 checkpoint depends on the `tree-ring capture` command.
 
-The checked-in Linux executables are verified `0.15.6` artifacts built from the
+The checked-in Linux executables are verified `0.15.7` artifacts built from the
 immutable core release on native x86-64 and ARM64 GitHub runners. Their matching
 checksums and provenance are part of the plugin release surface.
 
@@ -16,17 +16,17 @@ The Rust CLI owns validation, sensitivity classification, SQLite/FTS storage, re
 
 ## Release and update boundary
 
-- Plugin `3.4.1` supports `tree-ring` `0.15.6` through `0.15.x` and fails closed
+- Plugin `3.4.1` supports `tree-ring` `0.15.7` through `0.15.x` and fails closed
   on older or different-minor executables.
-- The activation capability also declares `0.15.6` as its minimum, so a core
+- The activation capability also declares `0.15.7` as its minimum, so a core
   without `tree-ring capture` cannot validate the plugin as active.
 - The current `bin/` executables, provenance, and checksums are pinned to
-  immutable core tag `v0.15.6`, commit
-  `c807d3f507bf15300e4f40449acca40001a6121e`.
-- The manual **Prepare Tree Ring 0.15.6 bundled binaries** workflow and
-  [`scripts/stage-v0156-bundled-binaries.sh`](scripts/stage-v0156-bundled-binaries.sh)
-  fail closed on non-0.15.6 or mismatched artifacts. The checked-in pair came
-  from successful native workflow run `33147052949`.
+  immutable core tag `v0.15.7`, commit
+  `8319b40d848ac9d2da0df513bb54350b47e8f0bd`.
+- The manual **Prepare Tree Ring 0.15.7 bundled binaries** workflow and
+  [`scripts/stage-v0157-bundled-binaries.sh`](scripts/stage-v0157-bundled-binaries.sh)
+  fail closed on non-0.15.7 or mismatched artifacts. The checked-in pair came
+  from successful native workflow run `34273197248`.
 
 ## Install and update
 
@@ -54,7 +54,7 @@ project's `.tree-ring` store.
 
 - Agent Zero with this directory mounted at `/a0/usr/plugins/tree_ring_memory/`.
 - An executable `tree-ring` `0.15.x` binary. The plugin requires at least
-  `0.15.6` and fails closed on older patches or other minor versions. A release
+  `0.15.7` and fails closed on older patches or other minor versions. A release
   build bundles compatible Linux binaries for Agent Zero's `x86_64` and
   `aarch64` Docker runtimes.
 - Python 3.12+ in the Agent Zero framework runtime.
@@ -285,7 +285,7 @@ node --check webui/memory-store.js
 ```
 
 Upstream certification uses the exact released CLI in a real Agent Zero package
-layout. Package tests verify both checked-in `0.15.6` binaries, their immutable
+layout. Package tests verify both checked-in `0.15.7` binaries, their immutable
 source provenance and checksums, activation envelopes, lifecycle capture, and
 the source-only bridge contract.
 
@@ -295,7 +295,7 @@ Keep implementation under `usr/plugins/tree_ring_memory/` and the companion guid
 
 ## Cross-session recall in 3.4.1
 
-The bundled CLI 0.15.6 fixes lifecycle visibility: project guidance and this
+The bundled CLI 0.15.7 fixes lifecycle visibility: project guidance and this
 agent profile survive new sessions; workflow and session memories stay confined
 to their matching identities. Keywordless startup loads a bounded ranked brief.
 The native prompt extension continues to inject receipt-backed context and the

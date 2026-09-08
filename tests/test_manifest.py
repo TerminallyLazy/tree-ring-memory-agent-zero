@@ -9,8 +9,8 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE_RELEASE_COMMIT = "c807d3f507bf15300e4f40449acca40001a6121e"
-NATIVE_BUNDLE_RUN = "33147052949"
+CORE_RELEASE_COMMIT = "8319b40d848ac9d2da0df513bb54350b47e8f0bd"
+NATIVE_BUNDLE_RUN = "34273197248"
 BOOKWORM_IMAGE = (
     "rust:1.95-bookworm"
     "@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1"
@@ -31,7 +31,7 @@ def test_manifest_declares_rust_bridge_generation():
 
     assert manifest["name"] == "tree_ring_memory"
     assert manifest["version"] == "3.4.1"
-    assert defaults["cli"]["required_version"] == "0.15.6"
+    assert defaults["cli"]["required_version"] == "0.15.7"
     assert defaults["coordination"]["coordinator_profiles"] == []
     assert defaults["storage"]["root"].endswith("/tree_ring_memory")
     assert defaults["storage"]["legacy_sqlite_path"].endswith("/indexes/memory.sqlite")
@@ -41,7 +41,7 @@ def test_manifest_declares_rust_bridge_generation():
         "plugin_id": "tree_ring_memory",
         "plugin_version": "3.4.1",
         "activation_protocol_version": 1,
-        "tree_ring_version": {"min": "0.15.6", "minor": "0.15"},
+        "tree_ring_version": {"min": "0.15.7", "minor": "0.15"},
         "enabled": True,
     }
 
@@ -79,24 +79,24 @@ def test_plugin_packages_native_agent_lifecycle_extensions():
     assert "never authorizes scraping the raw prompt" in prompt
 
 
-def test_release_docs_match_the_verified_v0156_bundle():
+def test_release_docs_match_the_verified_v0157_bundle():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     bundled = (ROOT / "bin" / "README.md").read_text(encoding="utf-8")
     normalized_readme = " ".join(readme.split())
     normalized_bundled = " ".join(bundled.split())
 
     assert "Plugin `3.4.1` targets the Tree Ring `0.15`" in readme
-    assert "supports `tree-ring` `0.15.6` through `0.15.x`" in readme
+    assert "supports `tree-ring` `0.15.7` through `0.15.x`" in readme
     assert "Activate this project" in readme
     assert "session-specific identity" in readme
     assert "does not initialize the legacy global memory root" in readme
     assert "without `tree-ring capture` cannot validate" in normalized_readme
     assert CORE_RELEASE_COMMIT in normalized_readme
     assert NATIVE_BUNDLE_RUN in normalized_readme
-    assert "Plugin `3.4.1` requires Tree Ring `0.15.6` through `0.15.x`" in normalized_bundled
+    assert "Plugin `3.4.1` requires Tree Ring `0.15.7` through `0.15.x`" in normalized_bundled
     assert CORE_RELEASE_COMMIT in normalized_bundled
     assert NATIVE_BUNDLE_RUN in normalized_bundled
-    assert "immutable Tree Ring Memory tag `v0.15.6`" in bundled
+    assert "immutable Tree Ring Memory tag `v0.15.7`" in bundled
 
 
 def test_capture_minimum_matches_the_verified_bundle():
@@ -111,35 +111,35 @@ def test_capture_minimum_matches_the_verified_bundle():
         for target in ("linux-aarch64", "linux-x86_64")
     }
 
-    assert defaults["cli"]["required_version"] == "0.15.6"
-    assert capability["tree_ring_version"]["min"] == "0.15.6"
-    assert bundled_versions == {"tree-ring 0.15.6"}
+    assert defaults["cli"]["required_version"] == "0.15.7"
+    assert capability["tree_ring_version"]["min"] == "0.15.7"
+    assert bundled_versions == {"tree-ring 0.15.7"}
 
 
-def test_v0156_bundle_workflow_is_manual_and_resolves_the_release_tag_at_runtime():
+def test_v0157_bundle_workflow_is_manual_and_resolves_the_release_tag_at_runtime():
     workflow = (ROOT / ".github" / "workflows" / "build-bundled-binaries.yml").read_text(
         encoding="utf-8"
     )
-    stager_path = ROOT / "scripts" / "stage-v0156-bundled-binaries.sh"
+    stager_path = ROOT / "scripts" / "stage-v0157-bundled-binaries.sh"
     stager = stager_path.read_text(
         encoding="utf-8"
     )
 
     assert "workflow_dispatch:" in workflow
     assert "pull_request:" not in workflow
-    assert "TREE_RING_RELEASE_TAG: v0.15.6" in workflow
-    assert "TREE_RING_RELEASE_VERSION: 0.15.6" in workflow
+    assert "TREE_RING_RELEASE_TAG: v0.15.7" in workflow
+    assert "TREE_RING_RELEASE_VERSION: 0.15.7" in workflow
     assert 'ref: ${{ env.TREE_RING_RELEASE_TAG }}' in workflow
     assert 'tag_commit="$(git rev-list -n 1 "$TREE_RING_RELEASE_TAG")"' in workflow
     assert 'echo "source_commit=$(git rev-parse HEAD)"' in workflow
     assert "--test harness_activation_acceptance" in workflow
     assert "tree-ring capture --help" in workflow
     assert 'echo "capture_command=verified"' in workflow
-    assert "tree-ring-v0.15.6-${{ matrix.target }}" in workflow
+    assert "tree-ring-v0.15.7-${{ matrix.target }}" in workflow
     assert "v0.13.0" not in workflow
     assert "v0.15.4" not in workflow
-    assert "EXPECTED_TAG=v0.15.6" in stager
-    assert "EXPECTED_VERSION='tree-ring 0.15.6'" in stager
+    assert "EXPECTED_TAG=v0.15.7" in stager
+    assert "EXPECTED_VERSION='tree-ring 0.15.7'" in stager
     assert "v0.15.4" not in stager
     assert "require_provenance capture_command verified" in stager
     assert "artifacts were built from different Tree Ring commits" in stager
@@ -164,7 +164,7 @@ def test_bundled_linux_binaries_match_declared_checksums():
             assert hashlib.file_digest(handle, "sha256").hexdigest() == checksums[relative]
 
 
-def test_bundled_linux_binaries_have_v0156_native_build_provenance():
+def test_bundled_linux_binaries_have_v0157_native_build_provenance():
     expected = {
         "linux-aarch64": ("ubuntu-24.04-arm", "aarch64"),
         "linux-x86_64": ("ubuntu-24.04", "x86_64"),
@@ -175,12 +175,12 @@ def test_bundled_linux_binaries_have_v0156_native_build_provenance():
         assert provenance["source_repository"] == (
             "https://github.com/TerminallyLazy/Tree-Ring-Memory"
         )
-        assert provenance["source_tag"] == "v0.15.6"
+        assert provenance["source_tag"] == "v0.15.7"
         assert provenance["source_commit"] == CORE_RELEASE_COMMIT
         assert provenance["build_image"] == BOOKWORM_IMAGE
         assert provenance["runner"] == runner
         assert provenance["machine"] == machine
-        assert provenance["binary_version"] == "tree-ring 0.15.6"
+        assert provenance["binary_version"] == "tree-ring 0.15.7"
         assert provenance["capture_command"] == "verified"
         required_glibc = tuple(
             int(component)

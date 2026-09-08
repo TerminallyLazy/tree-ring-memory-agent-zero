@@ -1,8 +1,8 @@
 #!/bin/sh
-# Stage the two native outputs of the pinned v0.15.6 workflow into this plugin.
+# Stage the two native outputs of the pinned v0.15.7 workflow into this plugin.
 #
 # This script deliberately accepts only the two GitHub Actions artifacts made by
-# .github/workflows/build-bundled-binaries.yml for the released Tree Ring v0.15.6 tag.
+# .github/workflows/build-bundled-binaries.yml for the released Tree Ring v0.15.7 tag.
 # It does not download, build, tag, or publish anything.
 set -eu
 
@@ -17,8 +17,8 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PLUGIN_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 X86_ARTIFACT=$1
 ARM_ARTIFACT=$2
-EXPECTED_TAG=v0.15.6
-EXPECTED_VERSION='tree-ring 0.15.6'
+EXPECTED_TAG=v0.15.7
+EXPECTED_VERSION='tree-ring 0.15.7'
 EXPECTED_REPOSITORY=https://github.com/TerminallyLazy/Tree-Ring-Memory
 EXPECTED_IMAGE='rust:1.95-bookworm@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1'
 
@@ -112,7 +112,7 @@ arm_commit=$(verify_artifact "$ARM_ARTIFACT" aarch64 ubuntu-24.04-arm)
   exit 65
 }
 
-stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/tree-ring-v0156-stage.XXXXXX")
+stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/tree-ring-v0157-stage.XXXXXX")
 cleanup() {
   rm -rf "$stage_dir"
 }

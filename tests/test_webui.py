@@ -101,8 +101,8 @@ def test_webui_runtime_fallback_requires_tree_ring_0155():
     html = (ROOT / "webui" / "main.html").read_text(encoding="utf-8")
     store = (ROOT / "webui" / "memory-store.js").read_text(encoding="utf-8")
 
-    assert store.count('required_version: "0.15.5"') == 2
-    assert "Tree Ring 0.15.5 or newer 0.15.x" in html
+    assert store.count('required_version: "0.15.6"') == 2
+    assert "Tree Ring 0.15.6 or newer 0.15.x" in html
     assert "0.15.4" not in html + store
 
 

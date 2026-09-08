@@ -61,7 +61,7 @@ class TreeRingCli:
 
     @property
     def required_version(self) -> str:
-        return str((self.config.get("cli") or {}).get("required_version") or "0.15.5")
+        return str((self.config.get("cli") or {}).get("required_version") or "0.15.6")
 
     @property
     def binary(self) -> Path:

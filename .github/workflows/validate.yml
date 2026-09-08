@@ -1,0 +1,26 @@
+name: Validate plugin package
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Prepare isolated test environment
+        run: |
+          python3 -m venv .validation-venv
+          .validation-venv/bin/pip install pytest==8.4.2 PyYAML==6.0.2
+      - name: Validate hooks, bundles, provenance, and package contracts
+        run: |
+          .validation-venv/bin/python -m pytest -q -p no:cacheprovider \
+            tests/test_manifest.py tests/test_release_bundle.py \
+            tests/test_lifecycle_extensions.py tests/test_webui.py \
+            tests/test_activation_package_layout.py
+          node --check webui/memory-store.js

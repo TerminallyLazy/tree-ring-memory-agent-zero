@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STAGER = ROOT / "scripts" / "stage-v0157-bundled-binaries.sh"
+STAGER = ROOT / "scripts" / "stage-v01512-bundled-binaries.sh"
 BOOKWORM_IMAGE = (
     "rust:1.95-bookworm"
     "@sha256:6258907abe69656e41cd992e0b705cdcfabcbbe3db374f92ed2d47121282d4a1"
@@ -20,9 +20,11 @@ def _artifact(
     runner: str,
     machine: str,
     source_commit: str,
-    source_tag: str = "v0.15.7",
-    release_version: str = "0.15.7",
+    source_tag: str = "v0.15.12",
+    release_version: str = "0.15.12",
     capture_verified: bool = True,
+    dox_guard_verified: bool = True,
+    activation_verified: bool = True,
 ) -> Path:
     root.mkdir()
     binary = root / "tree-ring"
@@ -47,6 +49,10 @@ def _artifact(
     ]
     if capture_verified:
         provenance.append("capture_command=verified")
+    if dox_guard_verified:
+        provenance.append("dox_source_guard=verified")
+    if activation_verified:
+        provenance.append("agent_zero_activation=verified")
     provenance.append("")
     (root / "PROVENANCE.txt").write_text(
         "\n".join(provenance),
@@ -67,7 +73,7 @@ def _plugin_copy(tmp_path: Path) -> Path:
     return plugin
 
 
-def test_release_stager_requires_matched_verified_v0157_artifacts(tmp_path):
+def test_release_stager_requires_matched_verified_v01512_artifacts(tmp_path):
     plugin = _plugin_copy(tmp_path)
     source_commit = "a" * 40
     x86 = _artifact(
@@ -165,7 +171,7 @@ def test_release_stager_refuses_the_checked_in_v0154_generation(tmp_path):
     )
 
     assert result.returncode != 0
-    assert "expected source_tag=v0.15.7" in result.stderr
+    assert "expected source_tag=v0.15.12" in result.stderr
     assert (plugin / "bin" / "linux-x86_64" / "tree-ring").read_bytes() == b"old-x86"
     assert (plugin / "bin" / "linux-aarch64" / "tree-ring").read_bytes() == b"old-arm"
 
@@ -195,5 +201,63 @@ def test_release_stager_requires_capture_command_provenance(tmp_path):
 
     assert result.returncode != 0
     assert "expected exactly one capture_command entry" in result.stderr
+    assert (plugin / "bin" / "linux-x86_64" / "tree-ring").read_bytes() == b"old-x86"
+    assert (plugin / "bin" / "linux-aarch64" / "tree-ring").read_bytes() == b"old-arm"
+
+
+def test_release_stager_requires_dox_source_guard_provenance(tmp_path):
+    plugin = _plugin_copy(tmp_path)
+    source_commit = "a" * 40
+    x86 = _artifact(
+        tmp_path / "x86",
+        runner="ubuntu-24.04",
+        machine="x86_64",
+        source_commit=source_commit,
+        dox_guard_verified=False,
+    )
+    arm = _artifact(
+        tmp_path / "arm",
+        runner="ubuntu-24.04-arm",
+        machine="aarch64",
+        source_commit=source_commit,
+    )
+
+    result = subprocess.run(
+        ["sh", str(plugin / "scripts" / STAGER.name), str(x86), str(arm)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "expected exactly one dox_source_guard entry" in result.stderr
+    assert (plugin / "bin" / "linux-x86_64" / "tree-ring").read_bytes() == b"old-x86"
+    assert (plugin / "bin" / "linux-aarch64" / "tree-ring").read_bytes() == b"old-arm"
+
+
+def test_release_stager_requires_agent_zero_activation_provenance(tmp_path):
+    plugin = _plugin_copy(tmp_path)
+    source_commit = "a" * 40
+    x86 = _artifact(
+        tmp_path / "x86",
+        runner="ubuntu-24.04",
+        machine="x86_64",
+        source_commit=source_commit,
+        activation_verified=False,
+    )
+    arm = _artifact(
+        tmp_path / "arm",
+        runner="ubuntu-24.04-arm",
+        machine="aarch64",
+        source_commit=source_commit,
+    )
+
+    result = subprocess.run(
+        ["sh", str(plugin / "scripts" / STAGER.name), str(x86), str(arm)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "expected exactly one agent_zero_activation entry" in result.stderr
     assert (plugin / "bin" / "linux-x86_64" / "tree-ring").read_bytes() == b"old-x86"
     assert (plugin / "bin" / "linux-aarch64" / "tree-ring").read_bytes() == b"old-arm"

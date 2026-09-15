@@ -1,11 +1,12 @@
 # Tree Ring Memory for Agent Zero
 
-Plugin `3.4.1` targets the Tree Ring `0.15` activation and automatic-capture
-protocol and requires Tree Ring `0.15.7` or a newer `0.15.x` patch. Core
-`0.15.7` is the first compatible release target because the agent-mediated
-checkpoint depends on the `tree-ring capture` command.
+Plugin `3.4.2` targets the Tree Ring `0.15` activation and automatic-capture
+protocol and requires Tree Ring `0.15.12` or a newer `0.15.x` patch. Core
+`0.15.12` recognizes this plugin's activation capability and retains the atomic
+DOX source-collision guards introduced in `0.15.11`. It also retains strict
+automatic capture and the existing receipt-backed lifecycle hooks.
 
-The checked-in Linux executables are verified `0.15.7` artifacts built from the
+The checked-in Linux executables are verified `0.15.12` artifacts built from the
 immutable core release on native x86-64 and ARM64 GitHub runners. Their matching
 checksums and provenance are part of the plugin release surface.
 
@@ -16,17 +17,18 @@ The Rust CLI owns validation, sensitivity classification, SQLite/FTS storage, re
 
 ## Release and update boundary
 
-- Plugin `3.4.1` supports `tree-ring` `0.15.7` through `0.15.x` and fails closed
+- Plugin `3.4.2` supports `tree-ring` `0.15.12` through `0.15.x` and fails closed
   on older or different-minor executables.
-- The activation capability also declares `0.15.7` as its minimum, so a core
-  without `tree-ring capture` cannot validate the plugin as active.
+- The activation capability also declares `0.15.12` as its minimum, so a core
+  without this plugin's activation contract cannot validate it as active. Saved
+  settings cannot lower the runtime minimum.
 - The current `bin/` executables, provenance, and checksums are pinned to
-  immutable core tag `v0.15.7`, commit
-  `8319b40d848ac9d2da0df513bb54350b47e8f0bd`.
-- The manual **Prepare Tree Ring 0.15.7 bundled binaries** workflow and
-  [`scripts/stage-v0157-bundled-binaries.sh`](scripts/stage-v0157-bundled-binaries.sh)
-  fail closed on non-0.15.7 or mismatched artifacts. The checked-in pair came
-  from successful native workflow run `34273197248`.
+  immutable core tag `v0.15.12`, commit
+  `e9433e281c9743988a194f5af36a8258f2b9cc68`.
+- The manual **Prepare Tree Ring 0.15.12 bundled binaries** workflow and
+  [`scripts/stage-v01512-bundled-binaries.sh`](scripts/stage-v01512-bundled-binaries.sh)
+  fail closed on non-0.15.12 or mismatched artifacts. The checked-in pair came
+  from successful native workflow run `35026514548`.
 
 ## Install and update
 
@@ -54,7 +56,7 @@ project's `.tree-ring` store.
 
 - Agent Zero with this directory mounted at `/a0/usr/plugins/tree_ring_memory/`.
 - An executable `tree-ring` `0.15.x` binary. The plugin requires at least
-  `0.15.7` and fails closed on older patches or other minor versions. A release
+  `0.15.12` and fails closed on older patches or other minor versions. A release
   build bundles compatible Linux binaries for Agent Zero's `x86_64` and
   `aarch64` Docker runtimes.
 - Python 3.12+ in the Agent Zero framework runtime.
@@ -173,7 +175,7 @@ The `0.15` bridge never auto-opens an existing unversioned v0.12 or versioned
 schema-v1/v2 store. The dashboard and settings report `upgrade_required` while
 normal store operations remain blocked. The `pre-v0.13` wording in backup
 filenames and markers is historical schema provenance, not a claim that a
-v0.13 runtime is supported by plugin `3.4.1`.
+v0.13 runtime is supported by plugin `3.4.2`.
 
 Treat the upgrade as an offline, one-way operation:
 
@@ -284,10 +286,26 @@ python3 -m pytest -q -p no:cacheprovider \
 node --check webui/memory-store.js
 ```
 
+Before tagging either a core release or a plugin release, exercise the current
+checkout's actual `plugin.yaml` and `activation-capability.json` against the
+candidate core executable:
+
+```bash
+python3 scripts/verify-activation-pair.py /absolute/path/to/candidate/tree-ring
+```
+
+This uses a temporary project to verify initialization, preflight, a matching
+receipt, and persisted active status. A version string alone is insufficient.
+Keep the core's capability allowlist exact; add and test the intended plugin/minimum
+pair instead of weakening the contract or substituting an older descriptor.
+Rerun the bridge's real-CLI tests against each finished bundle before publication.
+
 Upstream certification uses the exact released CLI in a real Agent Zero package
-layout. Package tests verify both checked-in `0.15.7` binaries, their immutable
+layout. Package tests verify both checked-in `0.15.12` binaries, their immutable
 source provenance and checksums, activation envelopes, lifecycle capture, and
-the source-only bridge contract.
+the source-only bridge contract. CI also runs the bridge against the bundled
+x86-64 executable, including repeated DOX sync and atomic source-collision
+rejection; release validation runs that same proof on native ARM64.
 
 ## Contribution Boundary
 
@@ -301,3 +319,61 @@ to their matching identities. Keywordless startup loads a bounded ranked brief.
 The native prompt extension continues to inject receipt-backed context and the
 monologue-end extension clears per-turn state. No additional pre-tool hook is
 needed. Re-run project activation if status reports an older managed adapter.
+
+## Guarded DOX sync in 3.4.2
+
+DOX sync still uses the public Rust CLI and the existing preview/apply tools.
+Repeated sync of the same source updates its stable IDs. A collision with another
+project, source root, or unrelated memory rejects the whole batch. Legacy DOX
+entries without root provenance can only be adopted in that source project's
+local `.tree-ring` store; shared or custom stores require provenance reconciliation
+or a separate project store. Coordinated writes still require an authorized
+coordinator. These checks run in the core; the bridge cannot bypass them.
+
+### Recovering legacy DOX from a shared or global store
+
+A rejected legacy DOX sync means the old entries do not identify their source
+root well enough for a safe update. Preserve the old memory root. If you make a
+backup copy, stop its writers first. Do not add guessed provenance, copy its
+SQLite database into a new store, or import its ambiguous DOX IDs to bypass the
+guard. Rebuild DOX memories from the authoritative project files instead:
+
+1. Mount the source project at its Agent Zero path, for example
+   `/a0/usr/projects/my-project`. Use a fresh project-local `.tree-ring` store;
+   if that path already contains a store, preserve and inspect it rather than
+   replacing it. A separate clean project checkout can provide a fresh store.
+2. In **Plugin Settings**, select that project's scope. Before activating, set
+   **Legacy Python-v1 SQLite** to
+   `/a0/usr/projects/my-project/.tree-ring/indexes/memory.sqlite`, which is absent
+   in the fresh store. This avoids importing an old Python-v1 database while
+   rebuilding DOX. **Activate this project** changes the memory and source roots
+   together, but retains the configured legacy migration path. If the host sets
+   `TREE_RING_MEMORY_ROOT` or `TREE_RING_MEMORY_DATA_DIR` to the old shared root,
+   the operator must remove or update that override first; it takes precedence
+   over the project setting.
+3. Choose **Activate this project** and open a chat for that project. Verify the
+   reported memory root is `/a0/usr/projects/my-project/.tree-ring` and select
+   that project's writer context. Check that the new store contains zero memories
+   before DOX import. If it is not empty, inspect why before proceeding; do not
+   clear it. Keep the old shared/global root available for separate review; this
+   procedure does not migrate its other memories.
+4. Ask the agent to call `sync_dox` with explicit source and project arguments:
+
+   ```json
+   {"source_root":"/a0/usr/projects/my-project","project":"my-project","dry_run":true}
+   ```
+
+   Replace both examples with the selected project's actual path and name.
+   Review the candidates, source references, rings, and warnings. The panel's
+   **Preview DOX** button also previews, but does not persist the result.
+5. With the source files unchanged, call `sync_dox` again with the same source
+   and project and `dry_run:false`. Use an authorized project context. If the
+   target store is coordinated, the context's profile must be in
+   `coordination.coordinator_profiles` and the runtime must already hold its
+   coordinator capability in the host environment. Never put a capability in
+   the tool arguments or plugin settings. Recheck the target store and recall
+   after the write; the original store remains preserved.
+
+The tool collects the source again when applying; if the files changed after
+preview, preview them again before applying. There is no automatic adoption of
+ambiguous legacy identities in a shared or global store.

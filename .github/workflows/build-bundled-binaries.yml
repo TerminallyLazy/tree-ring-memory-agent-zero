@@ -32,7 +32,12 @@ jobs:
       - name: Install verification tools
         run: |
           apt-get update
-          apt-get install --yes --no-install-recommends binutils file
+          apt-get install --yes --no-install-recommends binutils file python3
+
+      - name: Check out the current plugin contract
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          path: bridge
 
       - name: Check out exact upstream release tag
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -62,6 +67,9 @@ jobs:
           cargo build --release --locked -p tree-ring-memory-cli
           test "$(target/release/tree-ring --version)" = "tree-ring $TREE_RING_RELEASE_VERSION"
           target/release/tree-ring capture --help >/dev/null
+
+      - name: Verify current plugin activation against the built CLI
+        run: python3 bridge/scripts/verify-activation-pair.py upstream/target/release/tree-ring
 
       - name: Verify Bookworm runtime boundary and stage artifact
         working-directory: upstream
@@ -96,6 +104,7 @@ jobs:
             echo "binary_version=$(target/release/tree-ring --version)"
             echo "capture_command=verified"
             echo "dox_source_guard=verified"
+            echo "agent_zero_activation=verified"
           } > "bundle/${{ matrix.target }}/PROVENANCE.txt"
 
       - name: Upload verified native binary

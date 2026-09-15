@@ -24,3 +24,16 @@ jobs:
             tests/test_lifecycle_extensions.py tests/test_webui.py \
             tests/test_activation_package_layout.py
           node --check webui/memory-store.js
+      - name: Validate runtime floor in an isolated Agent Zero package layout
+        run: |
+          mkdir -p "$RUNNER_TEMP/tree-ring-layout/usr/plugins"
+          ln -s "$GITHUB_WORKSPACE" "$RUNNER_TEMP/tree-ring-layout/usr/plugins/tree_ring_memory"
+          PYTHONPATH="$RUNNER_TEMP/tree-ring-layout" \
+            .validation-venv/bin/python -m pytest -q -p no:cacheprovider \
+              tests/test_cli.py tests/test_config_paths.py -k 'not real_'
+      - name: Verify the bundled CLI through the bridge
+        run: |
+          PYTHONPATH="$RUNNER_TEMP/tree-ring-layout" \
+          TREE_RING_MEMORY_CLI="$GITHUB_WORKSPACE/bin/linux-x86_64/tree-ring" \
+            .validation-venv/bin/python -m pytest -q -p no:cacheprovider \
+              tests/test_cli.py tests/test_activation.py -k real_

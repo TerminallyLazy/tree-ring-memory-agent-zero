@@ -61,6 +61,7 @@ jobs:
         working-directory: upstream
         run: |
           cargo test --locked -p tree-ring-memory-cli --test harness_activation_acceptance
+          cargo test --locked -p tree-ring-memory-cli --test agent_zero_342_acceptance
           cargo test --locked -p tree-ring-memory-cli --test multi_agent_acceptance
           cargo test --locked -p tree-ring-memory-sqlite --lib dox
           cargo test --locked -p tree-ring-memory-cli actions::adapters::tests
